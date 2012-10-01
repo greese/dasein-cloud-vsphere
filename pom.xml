@@ -271,7 +271,7 @@
                 </property>
             </systemProperties>
           <includes>
-            <include>**/VsphereTestSuite.java</include>
+            <!-- <include>**/VsphereTestSuite.java</include> -->
           </includes>        
         </configuration>
       </plugin>  

@@ -127,11 +127,11 @@ public class Template implements MachineImageSupport {
         ArrayList<MachineImage> machineImages = new ArrayList<MachineImage>();
         ServiceInstance instance = getServiceInstance();
         
-        Folder rootFolder = instance.getRootFolder();
+        Folder folder = provider.getVmFolder(instance);
         ManagedEntity[] mes;
 
         try {
-            mes = new InventoryNavigator(rootFolder).searchManagedEntities("VirtualMachine");
+            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
         }
         catch( InvalidProperty e ) {
             throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
@@ -182,7 +182,7 @@ public class Template implements MachineImageSupport {
     
     private @Nullable MachineImage toMachineImage(@Nullable VirtualMachine template) throws InternalException, CloudException {
         if( template != null ) {
-            VirtualMachineConfigInfo vminfo = null;
+            VirtualMachineConfigInfo vminfo;
             MachineImage image = new MachineImage();
             VirtualMachineGuestOsIdentifier os;
             Platform platform;

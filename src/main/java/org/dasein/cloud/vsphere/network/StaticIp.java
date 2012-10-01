@@ -29,6 +29,7 @@ import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.AddressType;
+import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
 import org.dasein.cloud.network.IpAddressSupport;
 import org.dasein.cloud.network.IpForwardingRule;
@@ -53,6 +54,11 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
+    public void assignToNetworkInterface(@Nonnull String addressId, @Nonnull String nicId) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("Not yet supported");
+    }
+
+    @Override
     public @Nonnull String forward(@Nonnull String addressId, int publicPort, @Nonnull Protocol protocol, @SuppressWarnings("NullableProblems") int privatePort, @Nonnull String onServerId) throws InternalException, CloudException {
         throw new OperationNotSupportedException("IP address forwarding is not supported with vSphere");
     }
@@ -73,7 +79,17 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
+    public boolean isAssigned(@Nonnull IPVersion version) throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
     public boolean isForwarding() {
+        return false;
+    }
+
+    @Override
+    public boolean isForwarding(IPVersion version) throws CloudException, InternalException {
         return false;
     }
 
@@ -81,7 +97,12 @@ public class StaticIp implements IpAddressSupport {
     public boolean isRequestable(@Nonnull AddressType type) {
         return false;
     }
-    
+
+    @Override
+    public boolean isRequestable(@Nonnull IPVersion version) throws CloudException, InternalException {
+        return false;
+    }
+
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
         return false;
@@ -98,7 +119,17 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
+    public @Nonnull Iterable<IpAddress> listIpPool(@Nonnull IPVersion version, boolean unassignedOnly) throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Override
     public @Nonnull Iterable<IpForwardingRule> listRules(@Nonnull String addressId) throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public @Nonnull Iterable<IPVersion> listSupportedIPVersions() throws CloudException, InternalException {
         return Collections.emptyList();
     }
 
@@ -110,6 +141,16 @@ public class StaticIp implements IpAddressSupport {
     @Override
     public @Nonnull String request(@Nonnull AddressType type) throws InternalException, CloudException {
         throw new OperationNotSupportedException("Unable to allocate new IP addresses.");
+    }
+
+    @Override
+    public String request(@Nonnull IPVersion version) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("No support yet for requesting IP addresses");
+    }
+
+    @Override
+    public @Nonnull String requestForVLAN(IPVersion version) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("No support yet for requesting IP addresses");
     }
 
     @Override
@@ -125,5 +166,10 @@ public class StaticIp implements IpAddressSupport {
     @Override
     public void stopForward(@Nonnull String addressId) throws InternalException, CloudException {
         throw new OperationNotSupportedException("Unable to stop forwarding");
+    }
+
+    @Override
+    public boolean supportsVLANAddresses(@Nonnull IPVersion ofVersion) throws InternalException, CloudException {
+        return false;
     }
 }

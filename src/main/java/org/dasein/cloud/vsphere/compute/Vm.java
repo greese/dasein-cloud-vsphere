@@ -29,11 +29,14 @@ import java.util.Random;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
+import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
+import org.dasein.cloud.Requirement;
 import org.dasein.cloud.Tag;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
+import org.dasein.cloud.compute.VMLaunchOptions;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineProduct;
 import org.dasein.cloud.compute.VirtualMachineSupport;
@@ -67,6 +70,9 @@ import com.vmware.vim25.mo.ResourcePool;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import org.dasein.util.CalendarWrapper;
+import org.dasein.util.uom.storage.Gigabyte;
+import org.dasein.util.uom.storage.Megabyte;
+import org.dasein.util.uom.storage.Storage;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -97,7 +103,7 @@ public class Vm implements VirtualMachineSupport {
     }
     
     @Override
-    public void boot(@Nonnull String serverId) throws InternalException, CloudException {
+    public void start(@Nonnull String serverId) throws InternalException, CloudException {
         ServiceInstance instance = getServiceInstance();
         
         com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
@@ -135,7 +141,8 @@ public class Vm implements VirtualMachineSupport {
             }
             name = validateName(name);
             
-            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenter(service, dcId);
+            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dcId);
+            ResourcePool pool = vm.getResourcePool();
 
             if( dc == null ) {
                 throw new CloudException("Invalid DC for cloning operation: " + dcId);
@@ -144,7 +151,7 @@ public class Vm implements VirtualMachineSupport {
             
             VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
             VirtualMachineProduct product = getProduct(vm.getConfig().getHardware());
-            String[] sizeInfo = product.getProductId().split(":");
+            String[] sizeInfo = product.getProviderProductId().split(":");
             int cpuCount = Integer.parseInt(sizeInfo[0]);
             long memory = Long.parseLong(sizeInfo[1]);
             
@@ -155,8 +162,7 @@ public class Vm implements VirtualMachineSupport {
 
             VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
             VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
-            ResourcePool pool = (ResourcePool) new InventoryNavigator(dc).searchManagedEntities("ResourcePool")[0];
-            
+
             location.setHost(getBestHost(dc).getConfig().getHost());
             location.setPool(pool.getConfig().getEntity());
             spec.setLocation(location);
@@ -208,16 +214,20 @@ public class Vm implements VirtualMachineSupport {
                 if( id == null ) {
                     throw new CloudException("Got a VM without an ID");
                 }
-                boot(id);
+                start(id);
             }
             return target;
         }
         throw new CloudException("No virtual machine " + serverId + ".");
     }
 
+    private ManagedEntity[] randomize(ManagedEntity[] source) {
+        return source; // TODO: make this random
+    }
+
     private Random random = new Random();
     
-    private @Nonnull VirtualMachine define(@Nonnull String templateId, @Nonnull VirtualMachineProduct size, @Nullable String dataCenterId, @Nonnull String name) throws InternalException, CloudException {
+    private @Nonnull VirtualMachine define(@Nonnull VMLaunchOptions options) throws InternalException, CloudException {
         ProviderContext ctx = provider.getContext();
 
         if( ctx == null ) {
@@ -225,14 +235,13 @@ public class Vm implements VirtualMachineSupport {
         }
         ServiceInstance service = getServiceInstance();
         try {
-            com.vmware.vim25.mo.VirtualMachine template = getTemplate(service, templateId);
+            com.vmware.vim25.mo.VirtualMachine template = getTemplate(service, options.getMachineImageId());
 
             if( template == null ) {
-                throw new CloudException("No such template: " + templateId);
+                throw new CloudException("No such template: " + options.getMachineImageId());
             }
-            name = validateName(name);
-
-            Datacenter dc = null;
+            String hostName = validateName(options.getHostName());
+            String dataCenterId = options.getDataCenterId();
 
             if( dataCenterId == null ) {
                 String rid = ctx.getRegionId();
@@ -246,30 +255,55 @@ public class Vm implements VirtualMachineSupport {
                     }
                 }
             }
+            ManagedEntity[] pools = null;
+
+            Datacenter vdc = null;
+
             if( dataCenterId != null ) {
-                dc = provider.getDataCenterServices().getVmwareDatacenter(service, dataCenterId);
-            }
-            if( dc == null ) {
-                throw new CloudException("Could not identify a valid data center (" + dataCenterId + " attempted)");
-            }
-            ManagedEntity[] pools = new InventoryNavigator(dc).searchManagedEntities("ResourcePool");
+                if( provider.isClusterBased() ) {
+                    DataCenter dc = provider.getDataCenterServices().getDataCenter(dataCenterId);
 
+                    if( dc == null ) {
+                        throw new CloudException("No such data center: " + dataCenterId);
+                    }
+                    vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dc.getRegionId());
 
-            //Collection<HostSystem> possibleHosts = getPossibleHosts(dc);
+                    if( vdc == null ) {
+                        throw new CloudException("Unable to identify VDC " + dc.getRegionId());
+                    }
+                    ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(service, dataCenterId);
+
+                    if( pool != null ) {
+                        pools = new ManagedEntity[] { pool };
+                    }
+                }
+                else {
+                    vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dataCenterId);
+                    pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
+                }
+            }
+            if( vdc == null ) {
+                if( provider.isClusterBased() ) {
+                    vdc = getVmwareDatacenter(template);
+                    pools = randomize(new InventoryNavigator(vdc).searchManagedEntities("ResourcePool"));
+                }
+                if( vdc == null ) {
+                    throw new CloudException("Could not identify a valid data center (" + dataCenterId + " attempted)");
+                }
+            }
             CloudException lastError = null;
 
             for( ManagedEntity p : pools ) {
                 ResourcePool pool = (ResourcePool)p;
-            //for( HostSystem sys : possibleHosts ) {
-                Folder vmFolder = dc.getVmFolder();
+                Folder vmFolder = vdc.getVmFolder();
 
                 VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
-                String[] vmInfo = size.getProductId().split(":");
+                String[] vmInfo = options.getStandardProductId().split(":");
                 int cpuCount = Integer.parseInt(vmInfo[0]);
                 long memory = Long.parseLong(vmInfo[1]);
 
-                config.setName(name);
-                config.setAnnotation(templateId);
+                config.setName(hostName);
+                config.setAnnotation(options.getMachineImageId());
                 config.setMemoryMB(memory);
                 config.setNumCPUs(cpuCount);
 
@@ -277,7 +311,6 @@ public class Vm implements VirtualMachineSupport {
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
 
 
-                //location.setHost(sys.getConfig().getHost());
                 location.setPool(pool.getConfig().getEntity());
 
                 spec.setLocation(location);
@@ -285,7 +318,7 @@ public class Vm implements VirtualMachineSupport {
                 spec.setTemplate(false);
                 spec.setConfig(config);
 
-                Task task = template.cloneVM_Task(vmFolder, name, spec);
+                Task task = template.cloneVM_Task(vmFolder, hostName, spec);
 
                 String status = task.waitForTask();
 
@@ -297,7 +330,7 @@ public class Vm implements VirtualMachineSupport {
                         catch( InterruptedException ignore ) { }
 
                         for( VirtualMachine s : listVirtualMachines() ) {
-                            if( s.getName().equals(name) ) {
+                            if( s.getName().equals(hostName) ) {
                                 return s;
                             }
                         }
@@ -402,21 +435,36 @@ public class Vm implements VirtualMachineSupport {
         return "";
     }
 
-    private @Nullable String getDataCenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
-        ManagedEntity parent = vm.getParent();
+    @Override
+    public int getMaximumVirtualMachineCount() throws CloudException, InternalException {
+        return -1;
+    }
 
-        if( parent == null ) {
-            parent = vm.getParentVApp();
-        }
-        while( parent != null ) {
-            if( parent instanceof Datacenter ) {
-                return parent.getName();
+    private @Nullable String getDataCenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
+        if( provider.isClusterBased() ) {
+            try {
+                return vm.getResourcePool().getOwner().getName();
             }
-            parent = parent.getParent();
+            catch( RemoteException e ) {
+                throw new CloudException(e);
+            }
+        }
+        else {
+            ManagedEntity parent = vm.getParent();
+
+            if( parent == null ) {
+                parent = vm.getParentVApp();
+            }
+            while( parent != null ) {
+                if( parent instanceof Datacenter ) {
+                    return parent.getName();
+                }
+                parent = parent.getParent();
+            }
         }
         return null;
     }
-    
+
     @Override
     public @Nonnull Collection<String> listFirewalls(@Nonnull String serverId) throws InternalException, CloudException {
         return Collections.emptyList();
@@ -434,11 +482,11 @@ public class Vm implements VirtualMachineSupport {
         return null;
     }
     
-    private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance service, @Nonnull String templateId) throws RemoteException {
-        Folder rootFolder = service.getRootFolder();
+    private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance service, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
+        Folder folder = provider.getVmFolder(service);
         ManagedEntity[] mes;
         
-        mes = new InventoryNavigator(rootFolder).searchManagedEntities("VirtualMachine");
+        mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
         if( mes != null && mes.length > 0 ) {
             for( ManagedEntity entity : mes ) {
                 com.vmware.vim25.mo.VirtualMachine template = (com.vmware.vim25.mo.VirtualMachine)entity;
@@ -458,12 +506,12 @@ public class Vm implements VirtualMachineSupport {
     @Override 
     public @Nullable VirtualMachineProduct getProduct(@Nonnull String productId) throws InternalException, CloudException {
         for( VirtualMachineProduct product : listProducts(Architecture.I64) ) {
-            if( product.getProductId().equals(productId) ) {
+            if( product.getProviderProductId().equals(productId) ) {
                 return product;
             }
         }
         for( VirtualMachineProduct product : listProducts(Architecture.I32) ) {
-            if( product.getProductId().equals(productId) ) {
+            if( product.getProviderProductId().equals(productId) ) {
                 return product;
             }
         }
@@ -497,6 +545,41 @@ public class Vm implements VirtualMachineSupport {
         return Collections.emptyList();
     }
 
+    @Override
+    public @Nonnull Requirement identifyPasswordRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyVlanRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public boolean isAPITerminationPreventable() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
+    public boolean isBasicAnalyticsSupported() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
+    public boolean isExtendedAnalyticsSupported() throws CloudException, InternalException {
+        return false;
+    }
+
     private @Nonnull VirtualMachineProduct getProduct(@Nonnull VirtualHardware hardware) throws InternalException, CloudException {
         VirtualMachineProduct product = getProduct(hardware.getNumCPU() + ":" + hardware.getMemoryMB());
         
@@ -509,8 +592,8 @@ public class Vm implements VirtualMachineSupport {
             product.setCpuCount(cpu);
             product.setDescription("Custom product " + cpu + " CPU, " + ram + " RAM");
             product.setName(cpu + " CPU/" + ram + " MB RAM");
-            product.setDiskSizeInGb(disk);
-            product.setProductId(cpu + ":" + ram);
+            product.setRootVolumeSize(new Storage<Gigabyte>(disk, Storage.GIGABYTE));
+            product.setProviderProductId(cpu + ":" + ram);
         }
         return product;
     }
@@ -518,48 +601,65 @@ public class Vm implements VirtualMachineSupport {
     @Override
     public @Nonnull Collection<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture) throws InternalException, CloudException {
         ArrayList<VirtualMachineProduct> sizes = new ArrayList<VirtualMachineProduct>();
-        
-        switch( architecture ) {
-            case I32:
-                for( int cpu : new int[] { 1, 2 } ) {
-                    for( int ram : new int[] { 512, 1024, 2048 } ) {
-                        VirtualMachineProduct product = new VirtualMachineProduct();
-                        
-                        product.setCpuCount(cpu);
-                        product.setDescription("Custom product " + cpu + " CPU, " + ram + "GB RAM");
-                        product.setName(cpu + " CPU/" + ram + " GB RAM");
-                        product.setDiskSizeInGb(1);
-                        product.setProductId(cpu + ":" + ram);
-                        product.setRamInMb(ram);
-                        sizes.add(product);
+
+        for( Architecture a : listSupportedArchitectures() ) {
+            if( a.equals(architecture) ) {
+                if( a.equals(Architecture.I32) ) {
+                    for( int cpu : new int[] { 1, 2 } ) {
+                        for( int ram : new int[] { 512, 1024, 2048 } ) {
+                            VirtualMachineProduct product = new VirtualMachineProduct();
+
+                            product.setCpuCount(cpu);
+                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                            product.setName(cpu + " CPU/" + ram + " GB RAM");
+                            product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                            product.setProviderProductId(cpu + ":" + ram);
+                            product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                            sizes.add(product);
+                        }
                     }
                 }
-                break;
-            case I64:
-                for( int cpu : new int[] { 1, 2, 4, 8 } ) {
-                    for( int ram : new int[] { 1024, 2048, 4096, 10240, 20480 } ) {
-                        VirtualMachineProduct product = new VirtualMachineProduct();
-                        
-                        product.setCpuCount(cpu);
-                        product.setDescription("Custom product " + cpu + " CPU, " + ram + "GB RAM");
-                        product.setName(cpu + " CPU/" + ram + " GB RAM");
-                        product.setDiskSizeInGb(1);
-                        product.setProductId(cpu + ":" + ram);
-                        product.setRamInMb(ram * 1024);
-                        sizes.add(product);
+                else {
+                    for( int cpu : new int[] { 1, 2, 4, 8 } ) {
+                        for( int ram : new int[] { 1024, 2048, 4096, 10240, 20480 } ) {
+                            VirtualMachineProduct product = new VirtualMachineProduct();
+
+                            product.setCpuCount(cpu);
+                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                            product.setName(cpu + " CPU/" + ram + " GB RAM");
+                            product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                            product.setProviderProductId(cpu + ":" + ram);
+                            product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                            sizes.add(product);
+                        }
                     }
-                }                
-                break;
+                }
+                return sizes;
+            }
         }
-        return sizes;
+        return Collections.emptyList();
+    }
+
+    static private Collection<Architecture> architectures;
+
+    @Override
+    public Iterable<Architecture> listSupportedArchitectures() throws InternalException, CloudException {
+        if( architectures == null ) {
+            ArrayList<Architecture> list = new ArrayList<Architecture>();
+
+            list.add(Architecture.I32);
+            list.add(Architecture.I64);
+            architectures = Collections.unmodifiableCollection(list);
+        }
+        return architectures;
     }
 
     @Nullable com.vmware.vim25.mo.VirtualMachine getVirtualMachine(@Nonnull ServiceInstance instance, @Nonnull String vmId) throws CloudException, InternalException {
-        Folder rootFolder = instance.getRootFolder();
+        Folder folder = provider.getVmFolder(instance);
         ManagedEntity[] mes;
         
         try {
-            mes = new InventoryNavigator(rootFolder).searchManagedEntities("VirtualMachine");
+            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
         }
         catch( InvalidProperty e ) {
             throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
@@ -574,8 +674,8 @@ public class Vm implements VirtualMachineSupport {
         if( mes != null && mes.length > 0 ) {
             for( ManagedEntity entity : mes ) {
                 com.vmware.vim25.mo.VirtualMachine vm = (com.vmware.vim25.mo.VirtualMachine)entity;
-
-                if( vm != null && vm.getConfig().getInstanceUuid().equals(vmId) ) {
+                VirtualMachineConfigInfo cfg = (vm == null ? null : vm.getConfig());
+                if( cfg != null && cfg.getInstanceUuid().equals(vmId) ) {
                     return vm;
                 }
             }
@@ -605,23 +705,58 @@ public class Vm implements VirtualMachineSupport {
     }
     
     @Override
-    public @Nonnull VirtualMachine launch(@Nonnull String templateId, @Nonnull VirtualMachineProduct product, @Nullable String dataCenterId, @Nonnull String serverName, @Nonnull String description, String withKeypairId, String inVlanId, boolean withMonitoring, boolean asSandbox, @Nullable String[] firewalls, @Nullable Tag ... tags) throws InternalException, CloudException {        
-        VirtualMachine server = define(templateId, product, dataCenterId, serverName);
+    public @Nonnull VirtualMachine launch(@Nonnull String templateId, @Nonnull VirtualMachineProduct product, @Nullable String dataCenterId, @Nonnull String serverName, @Nonnull String description, String withKeypairId, String inVlanId, boolean withMonitoring, boolean asSandbox, @Nullable String[] firewalls, @Nullable Tag ... tags) throws InternalException, CloudException {
+        VMLaunchOptions options = VMLaunchOptions.getInstance(product.getProviderProductId(), templateId, serverName, description);
+
+        if( inVlanId != null ) {
+            if( dataCenterId == null ) {
+                throw new CloudException("No data center specified for VLAN " + inVlanId);
+            }
+            else {
+                options.inVlan(null, dataCenterId, inVlanId);
+            }
+        }
+        else if( dataCenterId != null ) {
+            options = options.inDataCenter(dataCenterId);
+        }
+        if( withKeypairId != null ) {
+            options = options.withBoostrapKey(withKeypairId);
+        }
+        if( withMonitoring ) {
+            options = options.withExtendedAnalytics();
+        }
+        if( firewalls != null ) {
+            options = options.behindFirewalls(firewalls);
+        }
+        if( tags != null ) {
+            for( Tag t : tags ) {
+                options = options.withMetaData(t.getKey(), t.getValue());
+            }
+        }
+        VirtualMachine server = define(options);
         
-        boot(server.getProviderVirtualMachineId());
+        start(server.getProviderVirtualMachineId());
+        return server;
+    }
+
+    @Override
+    public @Nonnull VirtualMachine launch(VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
+        VirtualMachine server = define(withLaunchOptions);
+
+        start(server.getProviderVirtualMachineId());
         return server;
     }
 
     @Override
     public @Nonnull Collection<VirtualMachine> listVirtualMachines() throws InternalException, CloudException {
         ServiceInstance instance = getServiceInstance();
-        
+        Folder folder = provider.getVmFolder(instance);
+
         ArrayList<VirtualMachine> servers = new ArrayList<VirtualMachine>();
-        Folder rootFolder = instance.getRootFolder();
         ManagedEntity[] mes;
 
         try {
-            mes = new InventoryNavigator(rootFolder).searchManagedEntities("VirtualMachine");
+            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
         }
         catch( InvalidProperty e ) {
             throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
@@ -643,6 +778,12 @@ public class Vm implements VirtualMachineSupport {
             }
         }
         return servers;
+
+    }
+
+    @Override
+    public void pause(@Nonnull String vmId) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("Pause/unpause is not supported with vSphere systems");
     }
 
     @Override
@@ -656,7 +797,32 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
-    public void pause(@Nonnull String serverId) throws InternalException, CloudException {
+    public void resume(@Nonnull String serverId) throws InternalException, CloudException {
+        ServiceInstance instance = getServiceInstance();
+
+        com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
+
+        if( vm != null ) {
+            try {
+                vm.powerOnVM_Task(null);
+            }
+            catch( TaskInProgress e ) {
+                throw new CloudException(e);
+            }
+            catch( InvalidState e ) {
+                throw new CloudException(e);
+            }
+            catch( RuntimeFault e ) {
+                throw new InternalException(e);
+            }
+            catch( RemoteException e ) {
+                throw new CloudException(e);
+            }
+        }
+    }
+
+    @Override
+    public void stop(@Nonnull String serverId) throws InternalException, CloudException {
         ServiceInstance instance = getServiceInstance();
 
         com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
@@ -664,6 +830,31 @@ public class Vm implements VirtualMachineSupport {
         if( vm != null ) {
             try {
                 vm.powerOffVM_Task();
+            }
+            catch( TaskInProgress e ) {
+                throw new CloudException(e);
+            }
+            catch( InvalidState e ) {
+                throw new CloudException(e);
+            }
+            catch( RuntimeFault e ) {
+                throw new InternalException(e);
+            }
+            catch( RemoteException e ) {
+                throw new CloudException(e);
+            }
+        }
+    }
+
+    @Override
+    public void suspend(@Nonnull String serverId) throws InternalException, CloudException {
+        ServiceInstance instance = getServiceInstance();
+
+        com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
+
+        if( vm != null ) {
+            try {
+                vm.suspendVM_Task();
             }
             catch( TaskInProgress e ) {
                 throw new CloudException(e);
@@ -746,6 +937,11 @@ public class Vm implements VirtualMachineSupport {
         t.start();
     }
 
+    @Override
+    public void unpause(@Nonnull String vmId) throws CloudException, InternalException {
+        throw new OperationNotSupportedException("Pause/unpause is not supported with vSphere systems");
+    }
+
     private void terminateVm(@Nonnull String serverId) {
         try {
             ServiceInstance service = getServiceInstance();
@@ -795,7 +991,7 @@ public class Vm implements VirtualMachineSupport {
     
     private @Nullable VirtualMachine toServer(@Nullable com.vmware.vim25.mo.VirtualMachine vm, @Nullable String description) throws InternalException, CloudException {
         if( vm != null ) {
-            VirtualMachineConfigInfo vminfo = null;
+            VirtualMachineConfigInfo vminfo;
 
             try {
                 vminfo = vm.getConfig();
@@ -833,7 +1029,7 @@ public class Vm implements VirtualMachineSupport {
                 description = vm.getName();
             }
             server.setDescription(description);
-            server.setProduct(getProduct(vminfo.getHardware()));
+            server.setProductId(getProduct(vminfo.getHardware()).getProviderProductId());
             String imageId = vminfo.getAnnotation();
             MachineImage img = null;
             
@@ -870,11 +1066,13 @@ public class Vm implements VirtualMachineSupport {
             
             if( runtime != null ) {
                 VirtualMachinePowerState state = runtime.getPowerState();
-                
+
                 if( server.getCurrentState() == null ) {
                     switch( state ) {
-                        case poweredOff: case suspended:
-                            server.setCurrentState(VmState.PAUSED);
+                        case suspended:
+                            server.setCurrentState(VmState.SUSPENDED);
+                        case poweredOff:
+                            server.setCurrentState(VmState.STOPPED);
                             break;
                         case poweredOn:
                             server.setCurrentState(VmState.RUNNING);
@@ -924,7 +1122,27 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
+    public boolean isUserDataSupported() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
     public boolean supportsAnalytics() throws CloudException, InternalException {
         return false;
+    }
+
+    @Override
+    public boolean supportsPauseUnpause(@Nonnull VirtualMachine vm) {
+        return false;
+    }
+
+    @Override
+    public boolean supportsStartStop(@Nonnull VirtualMachine vm) {
+        return true;
+    }
+
+    @Override
+    public boolean supportsSuspendResume(@Nonnull VirtualMachine vm) {
+        return true;
     }
 }

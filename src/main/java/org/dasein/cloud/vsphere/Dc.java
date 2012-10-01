@@ -18,11 +18,15 @@
 
 package org.dasein.cloud.vsphere;
 
+import java.net.URI;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Locale;
 
+import com.vmware.vim25.ManagedEntityStatus;
+import com.vmware.vim25.mo.ClusterComputeResource;
+import com.vmware.vim25.mo.ResourcePool;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -72,11 +76,16 @@ public class Dc implements DataCenterServices {
     @Override
     public @Nullable DataCenter getDataCenter(@Nonnull String dcId) throws InternalException, CloudException {
         String regionId = getContext().getRegionId();
-        
+
         if( regionId == null ) {
-            throw new CloudException("No region is established for this request");
+            throw new CloudException("No region was specified for this request.");
         }
-        return toDataCenter(getVmwareDatacenter(getServiceInstance(), dcId), regionId);
+        for( DataCenter dc : listDataCenters(regionId) ) {
+            if( dcId.equals(dc.getProviderDataCenterId()) ) {
+                return dc;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -99,8 +108,45 @@ public class Dc implements DataCenterServices {
         return null;
     }
 
-    
-    public @Nullable Datacenter getVmwareDatacenter(@Nonnull ServiceInstance service, @Nonnull String dcId) throws CloudException, InternalException {
+    public @Nullable ResourcePool getResourcePoolFromClusterId(@Nonnull ServiceInstance service, @Nonnull String dcId) throws CloudException, InternalException {
+        ServiceInstance instance = getServiceInstance();
+
+        DataCenter dsdc = getDataCenter(dcId);
+
+        if( dsdc == null ) {
+            return null;
+        }
+        Datacenter dc = getVmwareDatacenterFromVDCId(instance, dsdc.getRegionId());
+
+        if( dc == null ) {
+            return null;
+        }
+
+        ManagedEntity[] clusters;
+
+        try {
+            clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
+        for( ManagedEntity entity : clusters ) {
+            ClusterComputeResource cluster = (ClusterComputeResource)entity;
+
+            if( cluster.getName().equals(dcId) ) {
+                return cluster.getResourcePool();
+            }
+        }
+        return null;
+    }
+
+    public @Nullable Datacenter getVmwareDatacenterFromVDCId(@Nonnull ServiceInstance service, @Nonnull String dcId) throws CloudException, InternalException {
         Folder rootFolder = service.getRootFolder();
         
         try {
@@ -116,13 +162,59 @@ public class Dc implements DataCenterServices {
             throw new CloudException("Error in processing the request in the cluster: " + e.getMessage());
         }
     }
-    
+
     @Override
     public @Nonnull Collection<DataCenter> listDataCenters(@Nonnull String regionId) throws InternalException, CloudException {
+
+        if( !provider.isClusterBased() ) {
+            return listDataCentersFromVDCs(regionId);
+        }
+        else {
+            return listDataCentersFromClusters(regionId);
+        }
+    }
+
+    private @Nonnull Collection<DataCenter> listDataCentersFromClusters(@Nonnull String regionId) throws InternalException, CloudException {
         ArrayList<DataCenter> dataCenters = new ArrayList<DataCenter>();
         ServiceInstance instance = getServiceInstance();
-            
+        Datacenter dc = getVmwareDatacenterFromVDCId(instance, regionId);
+
+        if( dc == null ) {
+            throw new CloudException("No such region: " + regionId);
+        }
+
+        ManagedEntity[] clusters;
+
+        try {
+            clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
+        for( ManagedEntity entity : clusters ) {
+            ClusterComputeResource cluster = (ClusterComputeResource)entity;
+            DataCenter dataCenter = toDataCenter(cluster, regionId);
+
+            if( dataCenter != null ) {
+                dataCenters.add(dataCenter);
+            }
+
+        }
+        return dataCenters;
+    }
+
+    private @Nonnull Collection<DataCenter> listDataCentersFromVDCs(@Nonnull String regionId) throws InternalException, CloudException {
+        ArrayList<DataCenter> dataCenters = new ArrayList<DataCenter>();
+        ServiceInstance instance = getServiceInstance();
+
         Folder rootFolder = instance.getRootFolder();
+
         ManagedEntity[] mes;
 
         try {
@@ -153,12 +245,83 @@ public class Dc implements DataCenterServices {
 
     @Override
     public @Nonnull Collection<Region> listRegions() throws InternalException, CloudException {
+        if( !provider.isClusterBased() ) {
+            return listRegionsFromEndpoints();
+        }
+        else {
+            return listRegionsFromVDCs();
+        }
+    }
+
+    private @Nonnull Collection<Region> listRegionsFromVDCs() throws InternalException, CloudException {
         ArrayList<Region> regions = new ArrayList<Region>();
-        
-        for( String endpoint : provider.getEndpoints() ) {
-            regions.add(toRegion(provider.getRegionId(endpoint)));
+        ServiceInstance instance = getServiceInstance();
+
+        Folder rootFolder = instance.getRootFolder();
+        ManagedEntity[] mes;
+
+        try {
+            mes = new InventoryNavigator(rootFolder).searchManagedEntities("Datacenter");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
+
+        if( mes == null || mes.length < 1 ) {
+            return regions;
+        }
+        for( ManagedEntity entity : mes ) {
+            Region r = toRegion((Datacenter) entity);
+
+            if( r != null ) {
+                regions.add(r);
+            }
         }
         return regions;
+    }
+
+    private @Nonnull String getRegionId(@Nonnull String endpoint) {
+        try {
+            URI uri = new URI(endpoint);
+
+            return uri.getHost();
+        }
+        catch( Throwable t ) {
+            throw new RuntimeException(t);
+        }
+
+    }
+
+    private @Nonnull Collection<Region> listRegionsFromEndpoints() throws InternalException, CloudException {
+        ArrayList<Region> regions = new ArrayList<Region>();
+        String endpoint = getContext().getEndpoint();
+
+        if( endpoint != null ) {
+            regions.add(toRegion(getRegionId(endpoint)));
+        }
+        return regions;
+    }
+
+    private @Nullable DataCenter toDataCenter(@Nullable ClusterComputeResource cluster, @Nonnull String regionId) {
+        if( cluster == null ) {
+            return null;
+        }
+        ManagedEntityStatus status = cluster.getOverallStatus();
+        DataCenter dc = new DataCenter();
+
+        dc.setActive(true);
+        dc.setActive(!status.equals(ManagedEntityStatus.red));
+        dc.setAvailable(true);
+        dc.setName(cluster.getName());
+        dc.setProviderDataCenterId(cluster.getName());
+        dc.setRegionId(regionId);
+        return dc;
     }
 
     private @Nullable DataCenter toDataCenter(@Nullable Datacenter dc, @Nonnull String regionId) {
@@ -174,7 +337,21 @@ public class Dc implements DataCenterServices {
         }
         return null;
     }
-    
+
+    private @Nullable Region toRegion(@Nullable Datacenter dc) {
+        if(dc == null ) {
+            return null;
+        }
+        Region region = new Region();
+
+        region.setActive(true);
+        region.setAvailable(true);
+        region.setJurisdiction("US");
+        region.setName(dc.getName());
+        region.setProviderRegionId(dc.getName());
+        return region;
+    }
+
     private @Nonnull Region toRegion(@Nonnull String regionId) {
         Region region = new Region();
         

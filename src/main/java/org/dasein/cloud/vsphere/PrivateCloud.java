@@ -20,11 +20,12 @@ package org.dasein.cloud.vsphere;
 
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
-import java.net.URI;
 import java.net.URL;
 import java.rmi.RemoteException;
-import java.util.Calendar;
+import java.util.Properties;
 
+import com.vmware.vim25.mo.Datacenter;
+import com.vmware.vim25.mo.Folder;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.AbstractCloud;
 import org.dasein.cloud.CloudException;
@@ -173,52 +174,7 @@ public class PrivateCloud extends AbstractCloud {
     public @Nonnull Dc getDataCenterServices() {
         return new Dc(this);
     }
-    
-    private @Nonnull String getEndpoint(String regionId) throws CloudException {
-        for( String endpoint : getEndpoints() ) {
-            if( regionId == null ) {
-                return endpoint;
-            }
-            String rid = getRegionId(endpoint);
-            
-            if( rid.equals(regionId) ) {
-                return endpoint;
-            }
-        }
-        throw new CloudException("No endpoint has been configured");
-    }
-    
-    @Nonnull String[] getEndpoints() throws CloudException {
-        ProviderContext ctx = getContext();
-        
-        if( ctx == null ) {
-            throw new CloudException("No context has been configured");
-        }
-        String endpoint = ctx.getEndpoint();
-        
-        if( endpoint == null ) {
-            return new String[0];
-        }
-        String[] parts = endpoint.split(",");
-        
-        if( parts == null || parts.length < 1 ) {
-            return new String[] { endpoint };
-        }
-        return parts;
-    }
-    
-    @Nonnull String getRegionId(@Nonnull String endpoint) {
-        try {
-            URI uri = new URI(endpoint);
-        
-            return uri.getHost();
-        }
-        catch( Throwable t ) {
-            throw new RuntimeException(t);
-        }
 
-    }
-    
     public @Nullable ServiceInstance getServiceInstance() throws CloudException, InternalException {
         ProviderContext ctx = getContext();
         
@@ -226,7 +182,7 @@ public class PrivateCloud extends AbstractCloud {
             throw new CloudException("No context exists for this request");
         }
         try {
-            String endpoint = getEndpoint(ctx.getRegionId());
+            String endpoint = ctx.getEndpoint();
             
             return new ServiceInstance(new URL(endpoint), new String(ctx.getAccessPublic(), "utf-8"), new String(ctx.getAccessPrivate(), "utf-8"), true);
         }
@@ -246,7 +202,48 @@ public class PrivateCloud extends AbstractCloud {
             throw new InternalException("Encoding UTF-8 not supported: " + e.getMessage());
         }
     }
-    
+
+    public @Nullable Folder getVmFolder(ServiceInstance instance) throws InternalException, CloudException {
+        if( isClusterBased() ) {
+            String regionId = getContext().getRegionId();
+
+            if( regionId == null ) {
+                throw new CloudException("No region has been defined for this request");
+            }
+            Datacenter dc = getDataCenterServices().getVmwareDatacenterFromVDCId(instance, regionId);
+
+            if( dc == null ) {
+                return null;
+            }
+            try {
+                return dc.getVmFolder();
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in cluster processing request: " + e.getMessage());
+            }
+        }
+        else {
+            return instance.getRootFolder();
+        }
+    }
+
+    public boolean isClusterBased() throws CloudException {
+        ProviderContext ctx = getContext();
+
+        if( ctx == null ) {
+            throw new CloudException("No context was set for this request");
+        }
+        Properties p = ctx.getCustomProperties();
+        boolean cluster = true;
+
+        if( p != null ) {
+            String b = p.getProperty("clusterBased", "true");
+
+            cluster = b.equalsIgnoreCase("true");
+        }
+        return cluster;
+    }
+
     @Override
     public @Nullable String testContext() {
         Logger logger = getLogger(PrivateCloud.class, "std");

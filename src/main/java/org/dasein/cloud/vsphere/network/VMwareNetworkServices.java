@@ -22,13 +22,15 @@ import org.dasein.cloud.network.AbstractNetworkServices;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 public class VMwareNetworkServices extends AbstractNetworkServices {
     private PrivateCloud cloud;
     
     public VMwareNetworkServices(@Nonnull PrivateCloud cloud) { this.cloud = cloud; }
     
-    public @Nonnull StaticIp getIpAddressSupport() {
-        return new StaticIp(cloud);
+    public @Nullable StaticIp getIpAddressSupport() {
+        return null;
+        //return new StaticIp(cloud);
     }
 }

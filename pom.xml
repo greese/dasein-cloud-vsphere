@@ -22,7 +22,7 @@
 
   <groupId>org.dasein</groupId>
   <artifactId>dasein-cloud-vsphere</artifactId>
-  <version>2012.09.1-SNAPSHOT</version>
+  <version>2013.02-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>dasein-cloud-vsphere</name>
@@ -72,27 +72,15 @@
     <dependency>
         <groupId>org.dasein</groupId>
         <artifactId>dasein-cloud-core</artifactId>
-        <version>2012.09</version>
+        <version>2013.02.1</version>
         <scope>compile</scope>
-    </dependency>   
-    <dependency>
-        <groupId>org.dasein</groupId>
-        <artifactId>dasein-cloud-test</artifactId>
-        <version>2012.09.1</version>
-        <scope>test</scope>
-    </dependency>      
+    </dependency>
     <dependency>
         <groupId>org.dasein</groupId>
         <artifactId>dasein-util</artifactId>
         <version>2012.08</version>
         <scope>compile</scope>
         <optional>false</optional>
-    </dependency>  
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.9</version>
-      <scope>test</scope>
     </dependency>
     <dependency>
         <groupId>log4j</groupId>
@@ -131,6 +119,20 @@
         <optional>false</optional>
     </dependency>                   
        -->
+
+      <!-- Test -->
+      <dependency>
+          <groupId>org.dasein</groupId>
+          <artifactId>dasein-cloud-test</artifactId>
+          <version>2013.02.3</version>
+          <scope>test</scope>
+      </dependency>
+      <dependency>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+          <version>4.9</version>
+          <scope>test</scope>
+      </dependency>
   </dependencies>
   
   <build>

@@ -18,6 +18,7 @@
 
 package org.dasein.cloud.vsphere.network;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
 
@@ -27,6 +28,8 @@ import javax.annotation.Nullable;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
+import org.dasein.cloud.Requirement;
+import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.AddressType;
 import org.dasein.cloud.network.IPVersion;
@@ -74,12 +77,22 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
+    public @Nonnull Requirement identifyVlanForVlanIPRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
     public boolean isAssigned(@Nonnull AddressType type) {
         return false;
     }
 
     @Override
     public boolean isAssigned(@Nonnull IPVersion version) throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
+    public boolean isAssignablePostLaunch(@Nonnull IPVersion version) throws CloudException, InternalException {
         return false;
     }
 
@@ -124,6 +137,16 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
+    public @Nonnull Iterable<ResourceStatus> listIpPoolStatus(@Nonnull IPVersion version) throws InternalException, CloudException {
+        ArrayList<ResourceStatus> status = new ArrayList<ResourceStatus>();
+
+        for( IpAddress addr : listIpPool(version, false) ) {
+            status.add(new ResourceStatus(addr.getProviderIpAddressId(), !addr.isAssigned()));
+        }
+        return status;
+    }
+
+    @Override
     public @Nonnull Iterable<IpForwardingRule> listRules(@Nonnull String addressId) throws InternalException, CloudException {
         return Collections.emptyList();
     }
@@ -144,13 +167,18 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
-    public String request(@Nonnull IPVersion version) throws InternalException, CloudException {
+    public @Nonnull String request(@Nonnull IPVersion version) throws InternalException, CloudException {
         throw new OperationNotSupportedException("No support yet for requesting IP addresses");
     }
 
     @Override
-    public @Nonnull String requestForVLAN(IPVersion version) throws InternalException, CloudException {
+    public @Nonnull String requestForVLAN(@Nonnull IPVersion version) throws InternalException, CloudException {
         throw new OperationNotSupportedException("No support yet for requesting IP addresses");
+    }
+
+    @Override
+    public @Nonnull String requestForVLAN(@Nonnull IPVersion version, @Nonnull String vlanId) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("No support for VLAN IP addresses");
     }
 
     @Override

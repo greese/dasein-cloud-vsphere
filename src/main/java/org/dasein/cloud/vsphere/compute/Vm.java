@@ -32,11 +32,15 @@ import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
+import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.Tag;
 import org.dasein.cloud.compute.Architecture;
+import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VMLaunchOptions;
+import org.dasein.cloud.compute.VMScalingCapabilities;
+import org.dasein.cloud.compute.VMScalingOptions;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineProduct;
 import org.dasein.cloud.compute.VirtualMachineSupport;
@@ -44,6 +48,7 @@ import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.compute.VmStatistics;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.network.RawAddress;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import com.vmware.vim25.GuestInfo;
@@ -193,7 +198,12 @@ public class Vm implements VirtualMachineSupport {
             throw new InternalException(e);
         }
     }
-    
+
+    @Override
+    public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
+        throw new OperationNotSupportedException("Not currently supported");
+    }
+
     @Override
     public @Nonnull VirtualMachine clone(@Nonnull String serverId, @Nullable String intoDcId, @Nonnull String name, @Nonnull String description, boolean powerOn, @Nullable String ... firewallIds) throws InternalException, CloudException {
         ServiceInstance service = getServiceInstance();
@@ -219,6 +229,11 @@ public class Vm implements VirtualMachineSupport {
             return target;
         }
         throw new CloudException("No virtual machine " + serverId + ".");
+    }
+
+    @Override
+    public @Nullable VMScalingCapabilities describeVerticalScalingCapabilities() throws CloudException, InternalException {
+        return null;
     }
 
     private ManagedEntity[] randomize(ManagedEntity[] source) {
@@ -436,6 +451,11 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
+    public int getCostFactor(@Nonnull VmState state) throws InternalException, CloudException {
+        return 0;
+    }
+
+    @Override
     public int getMaximumVirtualMachineCount() throws CloudException, InternalException {
         return -1;
     }
@@ -546,8 +566,18 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
+    public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
+        return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
+    }
+
+    @Override
     public @Nonnull Requirement identifyPasswordRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyPasswordRequirement(Platform platform) throws CloudException, InternalException {
+        return Requirement.REQUIRED;
     }
 
     @Override
@@ -557,6 +587,16 @@ public class Vm implements VirtualMachineSupport {
 
     @Override
     public @Nonnull Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyShellKeyRequirement(Platform platform) throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Override
+    public @Nonnull Requirement identifyStaticIPRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
 
@@ -654,6 +694,39 @@ public class Vm implements VirtualMachineSupport {
         return architectures;
     }
 
+    @Override
+    public @Nonnull Iterable<ResourceStatus> listVirtualMachineStatus() throws InternalException, CloudException {
+        ServiceInstance instance = getServiceInstance();
+        Folder folder = provider.getVmFolder(instance);
+
+        ArrayList<ResourceStatus> servers = new ArrayList<ResourceStatus>();
+        ManagedEntity[] mes;
+
+        try {
+            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
+
+        if( mes != null && mes.length > 0 ) {
+            for( ManagedEntity entity : mes ) {
+                ResourceStatus server = toStatus((com.vmware.vim25.mo.VirtualMachine)entity);
+
+                if( server != null ) {
+                    servers.add(server);
+                }
+            }
+        }
+        return servers;
+    }
+
     @Nullable com.vmware.vim25.mo.VirtualMachine getVirtualMachine(@Nonnull ServiceInstance instance, @Nonnull String vmId) throws CloudException, InternalException {
         Folder folder = provider.getVmFolder(instance);
         ManagedEntity[] mes;
@@ -740,7 +813,7 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
-    public @Nonnull VirtualMachine launch(VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
+    public @Nonnull VirtualMachine launch(@Nonnull VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
         VirtualMachine server = define(withLaunchOptions);
 
         start(server.getProviderVirtualMachineId());
@@ -778,7 +851,6 @@ public class Vm implements VirtualMachineSupport {
             }
         }
         return servers;
-
     }
 
     @Override
@@ -823,9 +895,14 @@ public class Vm implements VirtualMachineSupport {
 
     @Override
     public void stop(@Nonnull String serverId) throws InternalException, CloudException {
+        stop(serverId, false);
+    }
+
+    @Override
+    public void stop(@Nonnull String vmId, boolean force) throws InternalException, CloudException {
         ServiceInstance instance = getServiceInstance();
 
-        com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
+        com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, vmId);
 
         if( vm != null ) {
             try {
@@ -942,6 +1019,11 @@ public class Vm implements VirtualMachineSupport {
         throw new OperationNotSupportedException("Pause/unpause is not supported with vSphere systems");
     }
 
+    @Override
+    public void updateTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        // NO-OP
+    }
+
     private void terminateVm(@Nonnull String serverId) {
         try {
             ServiceInstance service = getServiceInstance();
@@ -988,7 +1070,51 @@ public class Vm implements VirtualMachineSupport {
         }
         return true;
     }
-    
+
+    private @Nullable ResourceStatus toStatus(@Nullable com.vmware.vim25.mo.VirtualMachine vm) {
+        if( vm == null ) {
+            return null;
+        }
+        VirtualMachineConfigInfo vminfo;
+
+        try {
+            vminfo = vm.getConfig();
+        }
+        catch( RuntimeException e ) {
+            return null;
+        }
+        if( vminfo == null || vminfo.isTemplate() ) {
+            return null;
+        }
+        String id = vminfo.getInstanceUuid();
+
+        if( id == null ) {
+            return null;
+        }
+
+        VirtualMachineRuntimeInfo runtime = vm.getRuntime();
+        VmState vmState = VmState.PENDING;
+
+        if( runtime != null ) {
+            VirtualMachinePowerState state = runtime.getPowerState();
+
+            switch( state ) {
+                case suspended:
+                    vmState = VmState.SUSPENDED;
+                    break;
+                case poweredOff:
+                    vmState = VmState.STOPPED;
+                    break;
+                case poweredOn:
+                    vmState = VmState.RUNNING;
+                    break;
+                default:
+                    System.out.println("DEBUG: Unknown vSphere server state: " + state);
+            }
+        }
+        return new ResourceStatus(id, vmState);
+    }
+
     private @Nullable VirtualMachine toServer(@Nullable com.vmware.vim25.mo.VirtualMachine vm, @Nullable String description) throws InternalException, CloudException {
         if( vm != null ) {
             VirtualMachineConfigInfo vminfo;
@@ -1007,14 +1133,12 @@ public class Vm implements VirtualMachineSupport {
             GuestInfo guest = vm.getGuest();
             String addr = guest.getIpAddress();
 
-            server.setPrivateIpAddresses(new String[0]);
-            server.setPublicIpAddresses(new String[0]);
             if( addr != null ) {
                 if( isPublicIpAddress(addr) ) {
-                    server.setPublicIpAddresses(new String[] { addr });
+                    server.setPublicAddresses(new RawAddress(addr));
                 }
                 else {
-                    server.setPrivateIpAddresses(new String[] { addr });
+                    server.setPrivateAddresses(new RawAddress(addr));
                 }
             }
             if( guest.getHostName() != null ) {
@@ -1035,7 +1159,7 @@ public class Vm implements VirtualMachineSupport {
             
 
             if( imageId != null ) {
-                img = provider.getComputeServices().getImageSupport().getMachineImage(imageId);
+                img = provider.getComputeServices().getImageSupport().getImage(imageId);
             }
             if( img != null ) {
                 server.setProviderMachineImageId(vminfo.getAnnotation());
@@ -1057,7 +1181,7 @@ public class Vm implements VirtualMachineSupport {
                 String ipAddress = guestInfo.getIpAddress();
                 
                 if( ipAddress != null ) {
-                    server.setPrivateIpAddresses(new String[] { guestInfo.getIpAddress() });
+                    server.setPrivateAddresses(new RawAddress(guestInfo.getIpAddress()));
                     server.setPrivateDnsAddress(guestInfo.getIpAddress());
                 }
             }

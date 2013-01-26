@@ -22,7 +22,7 @@
 
   <groupId>org.dasein</groupId>
   <artifactId>dasein-cloud-vsphere</artifactId>
-  <version>2013.02.1-SNAPSHOT</version>
+  <version>2013.04-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>dasein-cloud-vsphere</name>
@@ -59,20 +59,11 @@
     <version>5</version>
   </parent>
 
-    <!--
-  <repositories>     
-    <repository>
-      <id>opennms</id>
-      <url>http://repo.opennms.org/maven2</url>
-    </repository> 
-  </repositories>
-  -->
-
   <dependencies>
     <dependency>
         <groupId>org.dasein</groupId>
         <artifactId>dasein-cloud-core</artifactId>
-        <version>2013.02.1</version>
+        <version>2013.04-SNAPSHOT</version>
         <scope>compile</scope>
     </dependency>
     <dependency>
@@ -96,35 +87,12 @@
         <scope>compile</scope>
         <optional>false</optional>
     </dependency>
-      <!--
-    <dependency>
-        <groupId>commons-codec</groupId>
-        <artifactId>commons-codec</artifactId>
-        <version>1.4</version>
-        <scope>runtime</scope>
-        <optional>false</optional>
-    </dependency>    
-    <dependency>
-        <groupId>commons-httpclient</groupId>
-        <artifactId>commons-httpclient</artifactId>
-        <version>3.1</version>
-        <scope>runtime</scope>
-        <optional>false</optional>
-    </dependency>
-    <dependency>
-        <groupId>dom4j</groupId>
-        <artifactId>dom4j</artifactId>
-        <version>1.6.1</version>
-        <scope>runtime</scope>
-        <optional>false</optional>
-    </dependency>                   
-       -->
 
       <!-- Test -->
       <dependency>
           <groupId>org.dasein</groupId>
           <artifactId>dasein-cloud-test</artifactId>
-          <version>2013.02.3</version>
+          <version>2013.04-SNAPSHOT</version>
           <scope>test</scope>
       </dependency>
       <dependency>
@@ -273,7 +241,7 @@
                 </property>
             </systemProperties>
           <includes>
-            <!-- <include>**/VsphereTestSuite.java</include> -->
+            <include>**/VsphereTestSuite.java</include>
           </includes>        
         </configuration>
       </plugin>  

@@ -1024,6 +1024,21 @@ public class Vm implements VirtualMachineSupport {
         // NO-OP
     }
 
+    @Override
+    public void updateTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
+        // NO-OP
+    }
+
+    @Override
+    public void removeTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        // NO-OP
+    }
+
+    @Override
+    public void removeTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
+        // NO-OP
+    }
+
     private void terminateVm(@Nonnull String serverId) {
         try {
             ServiceInstance service = getServiceInstance();

@@ -28,7 +28,6 @@ import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
-import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.compute.AbstractImageSupport;
@@ -67,15 +66,6 @@ public class Template extends AbstractImageSupport {
     Template(@Nonnull PrivateCloud cloud) {
         super(cloud);
         provider = cloud;
-    }
-
-    private @Nonnull ProviderContext getContext() throws CloudException {
-        ProviderContext ctx = provider.getContext();
-
-        if( ctx == null ) {
-            throw new CloudException("No context was set for this request");
-        }
-        return ctx;
     }
 
     private @Nonnull ServiceInstance getServiceInstance() throws CloudException, InternalException {

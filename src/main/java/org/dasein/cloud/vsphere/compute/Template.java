@@ -20,7 +20,6 @@ package org.dasein.cloud.vsphere.compute;
 
 import java.rmi.RemoteException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
@@ -29,18 +28,17 @@ import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
-import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
-import org.dasein.cloud.Tag;
+import org.dasein.cloud.compute.AbstractImageSupport;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.ImageCreateOptions;
+import org.dasein.cloud.compute.ImageFilterOptions;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.MachineImageFormat;
 import org.dasein.cloud.compute.MachineImageState;
-import org.dasein.cloud.compute.MachineImageSupport;
 import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.identity.ServiceAction;
@@ -62,11 +60,14 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
-public class Template implements MachineImageSupport {
+public class Template extends AbstractImageSupport {
 
     private PrivateCloud provider;
     
-    Template(@Nonnull PrivateCloud cloud) { provider = cloud; }
+    Template(@Nonnull PrivateCloud cloud) {
+        super(cloud);
+        provider = cloud;
+    }
 
     private @Nonnull ProviderContext getContext() throws CloudException {
         ProviderContext ctx = provider.getContext();
@@ -84,11 +85,6 @@ public class Template implements MachineImageSupport {
             throw new CloudException(CloudErrorType.AUTHENTICATION, HttpServletResponse.SC_UNAUTHORIZED, null, "Unauthorized");
         }
         return instance;
-    }
-    
-    @Override
-    public void remove(@Nonnull String templateId) throws InternalException, CloudException {
-        remove(templateId, false);
     }
 
     @Override
@@ -109,64 +105,6 @@ public class Template implements MachineImageSupport {
     }
 
     @Override
-    public void removeAllImageShares(@Nonnull String providerImageId) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void removeImageShare(@Nonnull String providerImageId, @Nonnull String accountNumber) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("No image sharing is supported");
-    }
-
-    @Override
-    public void removePublicShare(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("No image sharing is supported");
-    }
-
-    @Override
-    public void addImageShare(@Nonnull String providerImageId, @Nonnull String accountNumber) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("No image sharing is supported");
-    }
-
-    @Override
-    public void addPublicShare(@Nonnull String providerImageId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("No image sharing is supported");
-    }
-
-    @Override
-    public @Nonnull String bundleVirtualMachine(@Nonnull String virtualMachineId, @Nonnull MachineImageFormat format, @Nonnull String bucket, @Nonnull String name) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image bundling is not currently supported");
-    }
-
-    @Override
-    public void bundleVirtualMachineAsync(@Nonnull String virtualMachineId, @Nonnull MachineImageFormat format, @Nonnull String bucket, @Nonnull String name, @Nonnull AsynchronousTask<String> trackingTask) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image bundling is not currently supported");
-    }
-
-    @Override
-    public @Nonnull MachineImage captureImage(@Nonnull ImageCreateOptions options) throws CloudException, InternalException {
-        return capture(options, null);
-    }
-
-    @Override
-    public void captureImageAsync(final @Nonnull ImageCreateOptions options, final @Nonnull AsynchronousTask<MachineImage> taskTracker) throws CloudException, InternalException {
-        Thread t = new Thread() {
-            public void run() {
-                try {
-                    capture(options, taskTracker);
-                }
-                catch( Throwable t ) {
-                    taskTracker.complete(t);
-                }
-            }
-        };
-
-        t.setName("vSphere Image Capture of " + options.getVirtualMachineId());
-        t.setDaemon(true);
-        t.start();
-    }
-
-    @Override
     public MachineImage getImage(@Nonnull String providerImageId) throws CloudException, InternalException {
         for( ImageClass cls : listSupportedImageClasses() ) {
             for( MachineImage image : listImages(cls) ) {
@@ -179,29 +117,8 @@ public class Template implements MachineImageSupport {
     }
 
     @Override
-    @Deprecated
-    public @Nullable MachineImage getMachineImage(@Nonnull String templateId) throws InternalException, CloudException {
-        return getImage(templateId);
-    }
-
-    @Override
-    public @Nonnull String getProviderTermForImage(@Nonnull Locale locale) {
-        return getProviderTermForImage(locale, ImageClass.MACHINE);
-    }
-
-    @Override
     public @Nonnull String getProviderTermForImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
         return "template";
-    }
-
-    @Override
-    public @Nonnull String getProviderTermForCustomImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
-        return getProviderTermForImage(locale, cls);
-    }
-
-    @Override
-    public @Nonnull Collection<String> listShares(@Nonnull String templateId) throws CloudException, InternalException {
-        return Collections.emptyList();
     }
 
     @Override
@@ -215,25 +132,8 @@ public class Template implements MachineImageSupport {
     }
 
     @Override
-    public @Nonnull MachineImage registerImageBundle(@Nonnull ImageCreateOptions options) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Image registration is ot supported");
-    }
-
-
-    @Override
-    @Deprecated
-    public @Nonnull Iterable<MachineImage> listMachineImages() throws InternalException, CloudException {
-        return listImages(ImageClass.MACHINE);
-    }
-
-    @Override
     public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
         return new String[0];
-    }
-
-    @Override
-    public void shareMachineImage(@Nonnull String templateId, @Nullable String withAccountId, boolean grant) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("Sharing not supported.");
     }
     
     private @Nullable MachineImage toMachineImage(@Nullable VirtualMachine template) throws InternalException, CloudException {
@@ -302,7 +202,8 @@ public class Template implements MachineImageSupport {
         return Requirement.NONE;
     }
 
-    private MachineImage capture(@Nonnull ImageCreateOptions options, @Nullable AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
+    @Override
+    protected MachineImage capture(@Nonnull ImageCreateOptions options, @Nullable AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
         String vmId = options.getVirtualMachineId();
 
         if( vmId == null ) {
@@ -327,33 +228,6 @@ public class Template implements MachineImageSupport {
     }
 
     @Override
-    public @Nonnull AsynchronousTask<String> imageVirtualMachine(@Nonnull String vmId, @Nonnull String name, @Nonnull String description) throws CloudException, InternalException {
-        org.dasein.cloud.compute.VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(vmId);
-
-        if( vm == null ) {
-            throw new CloudException("No such virtual machine: " + vmId);
-        }
-        final ImageCreateOptions options = ImageCreateOptions.getInstance(vm,  name, description);
-        final AsynchronousTask<String> task = new AsynchronousTask<String>();
-
-        Thread t = new Thread() {
-            public void run() {
-                try {
-                    task.completeWithResult(capture(options, null).getProviderMachineImageId());
-                }
-                catch( Throwable t ) {
-                    task.complete(t);
-                }
-            }
-        };
-        
-        t.setName("Image VM " + vmId);
-        t.setDaemon(false);
-        t.start();
-        return task;
-    }
-
-    @Override
     public boolean isImageSharedWithPublic(@Nonnull String machineImageId) throws CloudException, InternalException {
         return false;
     }
@@ -374,8 +248,15 @@ public class Template implements MachineImageSupport {
     }
 
     @Override
-    public @Nonnull Iterable<MachineImage> listImages(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        if( !cls.equals(ImageClass.MACHINE) ) {
+    public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
+        ImageClass cls = (options == null ? null : options.getImageClass());
+
+        if( cls != null && !cls.equals(ImageClass.MACHINE) ) {
+            return Collections.emptyList();
+        }
+        String account = (options == null ? null : options.getAccountNumber());
+
+        if( account != null && !account.equals(getContext().getAccountNumber()) ) {
             return Collections.emptyList();
         }
         ArrayList<MachineImage> machineImages = new ArrayList<MachineImage>();
@@ -422,25 +303,6 @@ public class Template implements MachineImageSupport {
         }
 
         return machineImages;
-    }
-
-    @Override
-    public @Nonnull Iterable<MachineImage> listImages(@Nonnull ImageClass cls, @Nonnull String ownedBy) throws CloudException, InternalException {
-        return Collections.emptyList();
-    }
-
-    @Override
-    @Deprecated
-    public @Nonnull Iterable<MachineImage> listMachineImagesOwnedBy(@Nullable String accountId) throws CloudException, InternalException {
-        if( accountId == null ) {
-            return Collections.emptyList();
-        }
-        else if( accountId.equals(getContext().getAccountNumber()) ) {
-            return listImages(ImageClass.MACHINE);
-        }
-        else {
-            return listImages(ImageClass.MACHINE, accountId);
-        }
     }
 
     @Override
@@ -555,25 +417,4 @@ public class Template implements MachineImageSupport {
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return false;
     }
-
-    @Override
-    public void updateTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void updateTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void removeTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void removeTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
 }

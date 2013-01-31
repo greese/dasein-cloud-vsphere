@@ -33,7 +33,7 @@ import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
-import org.dasein.cloud.Tag;
+import org.dasein.cloud.compute.AbstractVMSupport;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.MachineImage;
@@ -43,9 +43,7 @@ import org.dasein.cloud.compute.VMScalingCapabilities;
 import org.dasein.cloud.compute.VMScalingOptions;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineProduct;
-import org.dasein.cloud.compute.VirtualMachineSupport;
 import org.dasein.cloud.compute.VmState;
-import org.dasein.cloud.compute.VmStatistics;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
@@ -83,19 +81,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
-public class Vm implements VirtualMachineSupport {
+public class Vm extends AbstractVMSupport {
 
     private PrivateCloud provider;
     
-    Vm(@Nonnull PrivateCloud provider) { this.provider = provider;  }
-
-    private @Nonnull ProviderContext getContext() throws CloudException {
-        ProviderContext ctx = provider.getContext();
-
-        if( ctx == null ) {
-            throw new CloudException("No context was set for this request");
-        }
-        return ctx;
+    Vm(@Nonnull PrivateCloud provider) {
+        super(provider);
+        this.provider = provider;
     }
 
     private @Nonnull ServiceInstance getServiceInstance() throws CloudException, InternalException {
@@ -556,23 +548,8 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
-    public @Nullable VmStatistics getVMStatistics(@Nonnull String serverId, long start, long end) throws InternalException, CloudException {
-        return null;
-    }
-
-    @Override
-    public @Nonnull Collection<VmStatistics> getVMStatisticsForPeriod(@Nonnull String serverId, long start, long end) throws InternalException, CloudException {
-        return Collections.emptyList();
-    }
-
-    @Override
     public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
-    }
-
-    @Override
-    public @Nonnull Requirement identifyPasswordRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
     }
 
     @Override
@@ -582,11 +559,6 @@ public class Vm implements VirtualMachineSupport {
 
     @Override
     public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyShellKeyRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
 
@@ -773,46 +745,6 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
-    public @Nonnull VirtualMachine launch(@Nonnull String templateId, @Nonnull VirtualMachineProduct product, @Nullable String dataCenterId, @Nonnull String serverName, @Nonnull String description, @Nullable String withKey, @Nullable String inVlanId, boolean withMonitoring, boolean forImaging, @Nullable String... firewalls) throws InternalException, CloudException {
-        return launch(templateId, product, dataCenterId, serverName, description, withKey, inVlanId, withMonitoring, forImaging, firewalls, new Tag[0]);
-    }
-    
-    @Override
-    public @Nonnull VirtualMachine launch(@Nonnull String templateId, @Nonnull VirtualMachineProduct product, @Nullable String dataCenterId, @Nonnull String serverName, @Nonnull String description, String withKeypairId, String inVlanId, boolean withMonitoring, boolean asSandbox, @Nullable String[] firewalls, @Nullable Tag ... tags) throws InternalException, CloudException {
-        VMLaunchOptions options = VMLaunchOptions.getInstance(product.getProviderProductId(), templateId, serverName, description);
-
-        if( inVlanId != null ) {
-            if( dataCenterId == null ) {
-                throw new CloudException("No data center specified for VLAN " + inVlanId);
-            }
-            else {
-                options.inVlan(null, dataCenterId, inVlanId);
-            }
-        }
-        else if( dataCenterId != null ) {
-            options = options.inDataCenter(dataCenterId);
-        }
-        if( withKeypairId != null ) {
-            options = options.withBoostrapKey(withKeypairId);
-        }
-        if( withMonitoring ) {
-            options = options.withExtendedAnalytics();
-        }
-        if( firewalls != null ) {
-            options = options.behindFirewalls(firewalls);
-        }
-        if( tags != null ) {
-            for( Tag t : tags ) {
-                options = options.withMetaData(t.getKey(), t.getValue());
-            }
-        }
-        VirtualMachine server = define(options);
-        
-        start(server.getProviderVirtualMachineId());
-        return server;
-    }
-
-    @Override
     public @Nonnull VirtualMachine launch(@Nonnull VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
         VirtualMachine server = define(withLaunchOptions);
 
@@ -854,18 +786,8 @@ public class Vm implements VirtualMachineSupport {
     }
 
     @Override
-    public void pause(@Nonnull String vmId) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("Pause/unpause is not supported with vSphere systems");
-    }
-
-    @Override
     public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
         return new String[0];
-    }
-
-    @Override
-    public void enableAnalytics(@Nonnull String serverId) throws InternalException, CloudException {
-        // NO-OP
     }
 
     @Override
@@ -891,11 +813,6 @@ public class Vm implements VirtualMachineSupport {
                 throw new CloudException(e);
             }
         }
-    }
-
-    @Override
-    public void stop(@Nonnull String serverId) throws InternalException, CloudException {
-        stop(serverId, false);
     }
 
     @Override
@@ -1012,31 +929,6 @@ public class Vm implements VirtualMachineSupport {
         t.setName("Terminate " + serverId);
         t.setDaemon(true);
         t.start();
-    }
-
-    @Override
-    public void unpause(@Nonnull String vmId) throws CloudException, InternalException {
-        throw new OperationNotSupportedException("Pause/unpause is not supported with vSphere systems");
-    }
-
-    @Override
-    public void updateTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void updateTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void removeTags(@Nonnull String vmId, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
-    }
-
-    @Override
-    public void removeTags(@Nonnull String[] vmIds, @Nonnull Tag... tags) throws CloudException, InternalException {
-        // NO-OP
     }
 
     private void terminateVm(@Nonnull String serverId) {
@@ -1241,11 +1133,6 @@ public class Vm implements VirtualMachineSupport {
         }
         return null;
     }
-    
-    @Override
-    public void disableAnalytics(String serverId) throws InternalException, CloudException {
-        // NO-OP
-    }
 
     private String validateName(String name) {
         name = name.toLowerCase().replaceAll("_", "-");
@@ -1262,11 +1149,6 @@ public class Vm implements VirtualMachineSupport {
 
     @Override
     public boolean isUserDataSupported() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean supportsAnalytics() throws CloudException, InternalException {
         return false;
     }
 

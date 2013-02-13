@@ -239,16 +239,6 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
-        ImageClass cls = (options == null ? null : options.getImageClass());
-
-        if( cls != null && !cls.equals(ImageClass.MACHINE) ) {
-            return Collections.emptyList();
-        }
-        String account = (options == null ? null : options.getAccountNumber());
-
-        if( account != null && !account.equals(getContext().getAccountNumber()) ) {
-            return Collections.emptyList();
-        }
         ArrayList<MachineImage> machineImages = new ArrayList<MachineImage>();
         ServiceInstance instance = getServiceInstance();
 
@@ -284,7 +274,7 @@ public class Template extends AbstractImageSupport {
                     if( cfg != null && cfg.isTemplate() ) {
                         MachineImage image = toMachineImage(template);
 
-                        if( image != null ) {
+                        if( image != null && (options == null || options.matches(image)) ) {
                             machineImages.add(image);
                         }
                     }
@@ -308,69 +298,6 @@ public class Template extends AbstractImageSupport {
     @Override
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
         return searchImages(null, keyword, platform, architecture, ImageClass.MACHINE);
-    }
-
-    @Override
-    public @Nonnull Iterable<MachineImage> searchImages(@Nullable String accountNumber, @Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture, @Nullable ImageClass... imageClasses) throws CloudException, InternalException {
-        if( accountNumber != null && !accountNumber.equals(getContext().getAccountNumber()) ) {
-            return Collections.emptyList();
-        }
-        if( imageClasses != null && imageClasses.length > 0 ) {
-            boolean ok = false;
-
-            for( ImageClass cls : imageClasses ) {
-                if( cls.equals(ImageClass.MACHINE) ) {
-                    ok = true;
-                    break;
-                }
-            }
-            if( !ok ) {
-                return Collections.emptyList();
-            }
-        }
-        ArrayList<MachineImage> matches = new ArrayList<MachineImage>();
-
-        for( MachineImage image : listImages(ImageClass.MACHINE) ) {
-            if( architecture != null && !architecture.equals(image.getArchitecture()) ) {
-                continue;
-            }
-            if( platform != null && !platform.equals(Platform.UNKNOWN) ) {
-                Platform mine = image.getPlatform();
-
-                if( platform.isWindows() && !mine.isWindows() ) {
-                    continue;
-                }
-                if( platform.isUnix() && !mine.isUnix() ) {
-                    continue;
-                }
-                if( platform.isBsd() && !mine.isBsd() ) {
-                    continue;
-                }
-                if( platform.isLinux() && !mine.isLinux() ) {
-                    continue;
-                }
-                if( platform.equals(Platform.UNIX) ) {
-                    if( !mine.isUnix() ) {
-                        continue;
-                    }
-                }
-                else if( !platform.equals(mine) ) {
-                    continue;
-                }
-            }
-            if( keyword != null && !keyword.equals("") ) {
-                keyword = keyword.toLowerCase();
-                if( !image.getProviderMachineImageId().toLowerCase().contains(keyword) ) {
-                    if( !image.getName().toLowerCase().contains(keyword) ) {
-                        if( !image.getDescription().toLowerCase().contains(keyword) ) {
-                            continue;
-                        }
-                    }
-                }
-            }
-            matches.add(image);
-        }
-        return matches;
     }
 
     @Override

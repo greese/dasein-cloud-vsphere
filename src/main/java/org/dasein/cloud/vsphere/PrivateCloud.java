@@ -183,8 +183,8 @@ public class PrivateCloud extends AbstractCloud {
         }
         try {
             String endpoint = ctx.getEndpoint();
-            
-            return new ServiceInstance(new URL(endpoint), new String(ctx.getAccessPublic(), "utf-8"), new String(ctx.getAccessPrivate(), "utf-8"), true);
+
+            return new ServiceInstance(new URL(endpoint), new String(ctx.getAccessPublic(), "utf-8"), new String(ctx.getAccessPrivate(), "utf-8"), isInsecure());
         }
         catch( InvalidLogin e ) {
             return null;
@@ -242,6 +242,35 @@ public class PrivateCloud extends AbstractCloud {
             cluster = b.equalsIgnoreCase("true");
         }
         return cluster;
+    }
+
+    /**
+     * Looks up the custom property ({@link ProviderContext#getCustomProperties()}) &quot;insecure&quot; and, if set to
+     * &quot;true&quot;, returns true. This indicates that SSL validation should not take place, thus leaving the
+     * connection open to man-in-the-middle attacks, even if the connection is encrypted.
+     * @return true if SSL certificate validation should be ignored
+     */
+    public boolean isInsecure() {
+        ProviderContext ctx = getContext();
+        String value;
+
+        if( ctx == null ) {
+            value = null;
+        }
+        else {
+            Properties p = ctx.getCustomProperties();
+
+            if( p == null ) {
+                value = null;
+            }
+            else {
+                value = p.getProperty("insecure");
+            }
+        }
+        if( value == null ) {
+            value = System.getProperty("insecure");
+        }
+        return (value != null && value.equalsIgnoreCase("true"));
     }
 
     @Override

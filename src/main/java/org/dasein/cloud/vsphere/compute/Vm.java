@@ -138,7 +138,7 @@ public class Vm extends AbstractVMSupport {
             }
             name = validateName(name);
             
-            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dcId);
+            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, /*dcId*/ getContext().getRegionId());
             ResourcePool pool = vm.getResourcePool();
 
             if( dc == null ) {

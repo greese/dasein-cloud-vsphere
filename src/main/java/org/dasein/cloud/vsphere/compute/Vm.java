@@ -931,6 +931,11 @@ public class Vm extends AbstractVMSupport {
         t.start();
     }
 
+    @Override
+    public void terminate(@Nonnull String vmId, String explanation)throws InternalException, CloudException{
+        terminate(vmId);
+    }
+
     private void terminateVm(@Nonnull String serverId) {
         try {
             ServiceInstance service = getServiceInstance();

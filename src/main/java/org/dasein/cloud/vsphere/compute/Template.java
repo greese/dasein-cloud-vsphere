@@ -79,6 +79,47 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public void remove(@Nonnull String providerImageId, boolean checkState) throws CloudException, InternalException {
+        ServiceInstance instance = getServiceInstance();
+
+        Folder folder = provider.getVmFolder(instance);
+        ManagedEntity[] mes;
+
+        try {
+            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
+
+        if( mes != null && mes.length > 0 ) {
+            for( ManagedEntity entity : mes ) {
+                VirtualMachine template = (VirtualMachine)entity;
+                if( template != null ) {
+                    VirtualMachineConfigInfo cfg = null;
+
+                    try {
+                        cfg = template.getConfig();
+                        if( cfg != null && cfg.isTemplate() ) {
+                            template.destroy_Task();
+                        }
+                    }
+                    catch(RuntimeException e) {
+                        e.printStackTrace();
+                    }
+                    catch(RemoteException ex){
+                        throw new CloudException(ex);
+                    }
+                }
+            }
+        }
+
+        /*
         ServiceInstance service = getServiceInstance();
 
         com.vmware.vim25.mo.VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(service, providerImageId);
@@ -92,6 +133,7 @@ public class Template extends AbstractImageSupport {
         catch( RemoteException e ) {
             throw new CloudException(e);
         }
+        */
     }
 
     @Override

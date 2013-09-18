@@ -943,18 +943,27 @@ public class Vm extends AbstractVMSupport {
             com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(service, serverId);
 
             if( vm != null ) {
-                Task task = vm.powerOffVM_Task();
-                String status = task.waitForTask();
+                VirtualMachineRuntimeInfo runtime = vm.getRuntime();
 
-                if( !status.equals(Task.SUCCESS) ) {
-                    System.err.println("Termination failed: " + status);
-                }
-                else {
-                    try { Thread.sleep(15000L); }
-                    catch( InterruptedException ignore ) { /* ignore */ }
-                    vm = getVirtualMachine(service, serverId);
-                    if( vm != null ) {
-                        vm.destroy_Task();
+                if( runtime != null ) {
+                    String status = "";
+
+                    VirtualMachinePowerState state = runtime.getPowerState();
+                    if(state != VirtualMachinePowerState.poweredOff){
+                        Task task = vm.powerOffVM_Task();
+                        status = task.waitForTask();
+                    }
+
+                    if(!status.equals("") && !status.equals(Task.SUCCESS)) {
+                        System.err.println("Termination failed: " + status);
+                    }
+                    else {
+                        try { Thread.sleep(15000L); }
+                        catch( InterruptedException ignore ) { /* ignore */ }
+                        vm = getVirtualMachine(service, serverId);
+                        if( vm != null ) {
+                            vm.destroy_Task();
+                        }
                     }
                 }
             }

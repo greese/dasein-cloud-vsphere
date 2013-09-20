@@ -100,7 +100,7 @@ public class Template extends AbstractImageSupport {
         if( mes != null && mes.length > 0 ) {
             for( ManagedEntity entity : mes ) {
                 VirtualMachine template = (VirtualMachine)entity;
-                if( template != null ) {
+                if( template != null && template.getConfig().getUuid().equals(providerImageId)) {
                     VirtualMachineConfigInfo cfg = null;
 
                     try {

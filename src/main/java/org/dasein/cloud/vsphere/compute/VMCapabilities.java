@@ -10,6 +10,7 @@ import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachineCapabilities;
 import org.dasein.cloud.compute.VMScalingCapabilities;
 import org.dasein.cloud.compute.VmState;
+import org.dasein.cloud.util.NamingConstraints;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import javax.annotation.Nonnull;
@@ -101,6 +102,12 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Override
     public VMScalingCapabilities getVerticalScalingCapabilities() throws CloudException, InternalException {
         return null;
+    }
+
+    @Nonnull
+    @Override
+    public NamingConstraints getVirtualMachineNamingConstraints() throws CloudException, InternalException {
+        return NamingConstraints.getAlphaNumeric(1, 30).constrainedBy(new char[] {'-'}).lowerCaseOnly();
     }
 
     @Nonnull

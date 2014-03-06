@@ -28,15 +28,14 @@ import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
-import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.compute.AbstractImageSupport;
 import org.dasein.cloud.compute.Architecture;
+import org.dasein.cloud.compute.ImageCapabilities;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.ImageCreateOptions;
 import org.dasein.cloud.compute.ImageFilterOptions;
 import org.dasein.cloud.compute.MachineImage;
-import org.dasein.cloud.compute.MachineImageFormat;
 import org.dasein.cloud.compute.MachineImageState;
 import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
@@ -136,6 +135,15 @@ public class Template extends AbstractImageSupport {
         */
     }
 
+    private transient volatile TemplateCapabilities capabilities;
+    @Override
+    public ImageCapabilities getCapabilities() throws CloudException, InternalException {
+        if( capabilities == null ) {
+            capabilities = new TemplateCapabilities(provider);
+        }
+        return capabilities;
+    }
+
     @Override
     public MachineImage getImage(@Nonnull String providerImageId) throws CloudException, InternalException {
         for( ImageClass cls : listSupportedImageClasses() ) {
@@ -151,16 +159,6 @@ public class Template extends AbstractImageSupport {
     @Override
     public @Nonnull String getProviderTermForImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
         return "template";
-    }
-
-    @Override
-    public @Nonnull Iterable<ImageClass> listSupportedImageClasses() throws CloudException, InternalException {
-        return Collections.singletonList(ImageClass.MACHINE);
-    }
-
-    @Override
-    public @Nonnull Iterable<MachineImageType> listSupportedImageTypes() throws CloudException, InternalException {
-        return Collections.singletonList(MachineImageType.VOLUME);
     }
 
     @Override
@@ -227,11 +225,6 @@ public class Template extends AbstractImageSupport {
     @Override
     public boolean hasPublicLibrary() {
         return false;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyLocalBundlingRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
     }
 
     @Override
@@ -328,16 +321,6 @@ public class Template extends AbstractImageSupport {
     }
 
     @Override
-    public @Nonnull Iterable<MachineImageFormat> listSupportedFormats() throws CloudException, InternalException {
-        return Collections.singletonList(MachineImageFormat.VMDK);
-    }
-
-    @Override
-    public @Nonnull Iterable<MachineImageFormat> listSupportedFormatsForBundling() throws CloudException, InternalException {
-        return Collections.emptyList();
-    }
-
-    @Override
     public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
         return searchImages(null, keyword, platform, architecture, ImageClass.MACHINE);
     }
@@ -350,30 +333,5 @@ public class Template extends AbstractImageSupport {
     @Override
     public boolean supportsCustomImages() {
         return true;
-    }
-
-    @Override
-    public boolean supportsDirectImageUpload() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean supportsImageCapture(@Nonnull MachineImageType type) throws CloudException, InternalException {
-        return type.equals(MachineImageType.VOLUME);
-    }
-
-    @Override
-    public boolean supportsImageSharing() {
-        return false;
-    }
-
-    @Override
-    public boolean supportsImageSharingWithPublic() {
-        return false;
-    }
-
-    @Override
-    public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        return false;
     }
 }

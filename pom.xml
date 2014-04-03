@@ -63,7 +63,7 @@
     <dependency>
         <groupId>org.dasein</groupId>
         <artifactId>dasein-cloud-core</artifactId>
-        <version>2014.03-SNAPSHOT</version>
+        <version>2014.03.2-SNAPSHOT</version>
         <scope>compile</scope>
     </dependency>
     <dependency>
@@ -100,7 +100,7 @@
       <dependency>
           <groupId>org.dasein</groupId>
           <artifactId>dasein-cloud-test</artifactId>
-          <version>2014.03-SNAPSHOT</version>
+          <version>2014.03.2-SNAPSHOT</version>
           <scope>test</scope>
       </dependency>
       <dependency>
@@ -208,11 +208,11 @@
                     <value>${accountNumber}</value>
                 </property>
                 <property>
-                    <name>apiSharedKey</name>
+                    <name>apiKeyShared</name>
                     <value>${apiSharedKey}</value>
                 </property>
                 <property>
-                    <name>apiSecretKey</name>
+                    <name>apiKeySecret</name>
                     <value>${apiSecretKey}</value>
                 </property>
                 <property>
@@ -243,6 +243,7 @@
           <includes>
             <include>**/TestSuite.java</include>
           </includes>
+        <!--    <argLine>-Ddasein.inclusions=StatelessDCTests</argLine>   -->
         </configuration>
       </plugin>  
       <plugin>

@@ -22,6 +22,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
+import java.util.List;
 import java.util.Properties;
 
 import com.vmware.vim25.mo.Datacenter;
@@ -29,6 +30,7 @@ import com.vmware.vim25.mo.Folder;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.AbstractCloud;
 import org.dasein.cloud.CloudException;
+import org.dasein.cloud.ContextRequirements;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.storage.BlobStoreSupport;
@@ -150,6 +152,13 @@ public class PrivateCloud extends AbstractCloud {
     }
 
     @Override
+    public @Nonnull ContextRequirements getContextRequirements() {
+        return new ContextRequirements(
+                new ContextRequirements.Field("apiKey", "The API Keypair", ContextRequirements.FieldType.KEYPAIR, ContextRequirements.Field.ACCESS_KEYS, true)
+        );
+    }
+
+    @Override
     public @Nonnull VMwareNetworkServices getNetworkServices() {
         return new VMwareNetworkServices(this);
     }
@@ -184,7 +193,23 @@ public class PrivateCloud extends AbstractCloud {
         try {
             String endpoint = ctx.getEndpoint();
 
-            return new ServiceInstance(new URL(endpoint), new String(ctx.getAccessPublic(), "utf-8"), new String(ctx.getAccessPrivate(), "utf-8"), isInsecure());
+            String accessPublic = null;
+            String accessPrivate = null;
+            try {
+                List<ContextRequirements.Field> fields = getContextRequirements().getConfigurableValues();
+                for(ContextRequirements.Field f : fields ) {
+                    if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
+                        byte[][] keyPair = (byte[][])getContext().getConfigurationValue(f);
+                        accessPublic = new String(keyPair[0], "utf-8");
+                        accessPrivate = new String(keyPair[1], "utf-8");
+                    }
+                }
+            }
+            catch( UnsupportedEncodingException e ) {
+                e.printStackTrace();
+                throw new RuntimeException("This cannot happen: " + e.getMessage());
+            }
+            return new ServiceInstance(new URL(endpoint), accessPublic, accessPrivate, isInsecure());
         }
         catch( InvalidLogin e ) {
             return null;
@@ -196,10 +221,6 @@ public class PrivateCloud extends AbstractCloud {
         catch( MalformedURLException e ) {
             e.printStackTrace();
             throw new InternalException("Failed to generate endpoint URL for " + ctx.getEndpoint() + ": " + e.getMessage());
-        }
-        catch( UnsupportedEncodingException e ) {
-            e.printStackTrace();
-            throw new InternalException("Encoding UTF-8 not supported: " + e.getMessage());
         }
     }
 

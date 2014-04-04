@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Locale;
 import java.util.Random;
 
 import org.dasein.cloud.CloudErrorType;
@@ -31,18 +30,16 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
-import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.compute.AbstractVMSupport;
 import org.dasein.cloud.compute.Architecture;
-import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.compute.VMLaunchOptions;
-import org.dasein.cloud.compute.VMScalingCapabilities;
-import org.dasein.cloud.compute.VMScalingOptions;
+import org.dasein.cloud.compute.VirtualMachineCapabilities;
 import org.dasein.cloud.compute.VirtualMachine;
 import org.dasein.cloud.compute.VirtualMachineProduct;
+import org.dasein.cloud.compute.VMLaunchOptions;
+import org.dasein.cloud.compute.VMScalingOptions;
 import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
@@ -223,9 +220,14 @@ public class Vm extends AbstractVMSupport {
         throw new CloudException("No virtual machine " + serverId + ".");
     }
 
+    private transient volatile VMCapabilities capabilities;
+    @Nonnull
     @Override
-    public @Nullable VMScalingCapabilities describeVerticalScalingCapabilities() throws CloudException, InternalException {
-        return null;
+    public VirtualMachineCapabilities getCapabilities() throws InternalException, CloudException {
+        if( capabilities == null ) {
+            capabilities = new VMCapabilities(provider);
+        }
+        return capabilities;
     }
 
     private ManagedEntity[] randomize(ManagedEntity[] source) {
@@ -442,16 +444,6 @@ public class Vm extends AbstractVMSupport {
         return "";
     }
 
-    @Override
-    public int getCostFactor(@Nonnull VmState state) throws InternalException, CloudException {
-        return 0;
-    }
-
-    @Override
-    public int getMaximumVirtualMachineCount() throws CloudException, InternalException {
-        return -1;
-    }
-
     private @Nullable String getDataCenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
         if( provider.isClusterBased() ) {
             try {
@@ -531,11 +523,6 @@ public class Vm extends AbstractVMSupport {
     }
     
     @Override
-    public @Nonnull String getProviderTermForServer(@Nonnull Locale locale) {
-        return "server";
-    }
-
-    @Override
     public @Nullable VirtualMachine getVirtualMachine(@Nonnull String serverId) throws InternalException, CloudException {
         ServiceInstance instance = getServiceInstance();
 
@@ -545,51 +532,6 @@ public class Vm extends AbstractVMSupport {
             return null;
         }
         return toServer(vm, null);
-    }
-
-    @Override
-    public @Nonnull Requirement identifyImageRequirement(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        return (cls.equals(ImageClass.MACHINE) ? Requirement.REQUIRED : Requirement.NONE);
-    }
-
-    @Override
-    public @Nonnull Requirement identifyPasswordRequirement(Platform platform) throws CloudException, InternalException {
-        return Requirement.REQUIRED;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyRootVolumeRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyShellKeyRequirement(Platform platform) throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyStaticIPRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public @Nonnull Requirement identifyVlanRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public boolean isAPITerminationPreventable() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isBasicAnalyticsSupported() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isExtendedAnalyticsSupported() throws CloudException, InternalException {
-        return false;
     }
 
     private @Nonnull VirtualMachineProduct getProduct(@Nonnull VirtualHardware hardware) throws InternalException, CloudException {
@@ -1159,25 +1101,5 @@ public class Vm extends AbstractVMSupport {
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
         return (provider.getServiceInstance() != null);
-    }
-
-    @Override
-    public boolean isUserDataSupported() throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean supportsPauseUnpause(@Nonnull VirtualMachine vm) {
-        return false;
-    }
-
-    @Override
-    public boolean supportsStartStop(@Nonnull VirtualMachine vm) {
-        return true;
-    }
-
-    @Override
-    public boolean supportsSuspendResume(@Nonnull VirtualMachine vm) {
-        return true;
     }
 }

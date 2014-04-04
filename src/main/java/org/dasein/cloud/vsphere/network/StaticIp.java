@@ -34,6 +34,7 @@ import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.AddressType;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
+import org.dasein.cloud.network.IPAddressCapabilities;
 import org.dasein.cloud.network.IpAddressSupport;
 import org.dasein.cloud.network.IpForwardingRule;
 import org.dasein.cloud.network.Protocol;
@@ -64,6 +65,16 @@ public class StaticIp implements IpAddressSupport {
     @Override
     public @Nonnull String forward(@Nonnull String addressId, int publicPort, @Nonnull Protocol protocol, @SuppressWarnings("NullableProblems") int privatePort, @Nonnull String onServerId) throws InternalException, CloudException {
         throw new OperationNotSupportedException("IP address forwarding is not supported with vSphere");
+    }
+
+    private transient volatile StaticIPCapabilities capabilities;
+    @Nonnull
+    @Override
+    public IPAddressCapabilities getCapabilities() throws CloudException, InternalException {
+        if( capabilities == null ) {
+            capabilities = new StaticIPCapabilities(provider);
+        }
+        return capabilities;
     }
 
     @Override

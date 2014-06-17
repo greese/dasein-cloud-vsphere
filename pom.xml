@@ -80,13 +80,23 @@
         <scope>compile</scope>
         <optional>false</optional>
     </dependency>
-    <dependency>
+   <!-- <dependency>
         <groupId>com.cloudbees.thirdparty</groupId>
         <artifactId>vijava</artifactId>
         <version>5.0.0</version>
         <scope>compile</scope>
         <optional>false</optional>
-    </dependency>
+    </dependency>  -->
+      <dependency>
+          <groupId>vijava</groupId>
+          <artifactId>vsphere-sdk</artifactId>
+          <version>5.5-beta</version>
+      </dependency>
+      <dependency>
+          <groupId>dom4j</groupId>
+          <artifactId>dom4j</artifactId>
+          <version>1.6.1</version>
+      </dependency>
 
       <!-- Provided -->
       <dependency>
@@ -243,7 +253,7 @@
           <excludes>
             <exclude>**/TestSuite.java</exclude>
           </excludes>
-        <!--    <argLine>-Ddasein.inclusions=StatelessDCTests</argLine>   -->
+           <!-- <argLine>-Ddasein.inclusions=StatelessVMTests,StatefulVMTests.terminate</argLine> -->
         </configuration>
       </plugin>  
       <plugin>

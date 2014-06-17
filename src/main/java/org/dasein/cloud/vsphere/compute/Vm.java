@@ -46,12 +46,20 @@ import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
+import com.vmware.vim25.Description;
 import com.vmware.vim25.GuestInfo;
+import com.vmware.vim25.GuestNicInfo;
 import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedEntityStatus;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInProgress;
+import com.vmware.vim25.VirtualDeviceConfigSpec;
+import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
+import com.vmware.vim25.VirtualDeviceConnectInfo;
+import com.vmware.vim25.VirtualE1000;
+import com.vmware.vim25.VirtualEthernetCard;
+import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigInfo;
@@ -316,6 +324,39 @@ public class Vm extends AbstractVMSupport {
                 config.setMemoryMB(memory);
                 config.setNumCPUs(cpuCount);
 
+                //networking section
+                //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
+                String vlan = options.getVlanId();
+                if (vlan != null) {
+                    String vlanOnly = vlan.substring(0, vlan.indexOf("_"));
+                    VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                    nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+
+                    VirtualEthernetCard nic = new VirtualE1000();
+                    nic.setConnectable(new VirtualDeviceConnectInfo());
+                    nic.connectable.connected=true;
+                    nic.connectable.startConnected=true;
+
+                    Description info = new Description();
+                    info.setLabel(vlanOnly);
+                    info.setSummary("Nic for network "+vlanOnly);
+
+                    VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                    nicBacking.setDeviceName(vlanOnly);
+
+                    nic.setAddressType("generated");
+                    nic.setBacking(nicBacking);
+                    nic.setKey(0);
+
+                    nicSpec.setDevice(nic);
+
+                    VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[1];
+                    machineSpecs[0]=nicSpec;
+
+                    config.setDeviceChange(machineSpecs);
+                    // end networking section
+                }
+
                 VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
 
@@ -326,6 +367,7 @@ public class Vm extends AbstractVMSupport {
                 spec.setPowerOn(false);
                 spec.setTemplate(false);
                 spec.setConfig(config);
+
 
                 Task task = template.cloneVM_Task(vmFolder, hostName, spec);
 
@@ -594,6 +636,12 @@ public class Vm extends AbstractVMSupport {
         return Collections.emptyList();
     }
 
+    @Nonnull
+    @Override
+    public Iterable<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture, String preferedDataCenterId) throws InternalException, CloudException {
+        return listProducts(architecture);
+    }
+
     static private Collection<Architecture> architectures;
 
     @Override
@@ -682,7 +730,6 @@ public class Vm extends AbstractVMSupport {
             }
             parent = parent.getParent();
         }
-        System.out.println("Failed to find VMware DC for " + vm + " in " + vm.getParent() + " / " + vm.getParentVApp());
         return null;
     }
 
@@ -788,9 +835,19 @@ public class Vm extends AbstractVMSupport {
 
         com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
 
+        VirtualMachine daseinVM = toServer(vm,"");
         if( vm != null ) {
             try {
                 vm.suspendVM_Task();
+                vm = getVirtualMachine(instance, serverId);
+                daseinVM = toServer(vm,"");
+
+                try {
+                    Thread.sleep(CalendarWrapper.MINUTE*5);
+                }
+                catch (InterruptedException ignore) {}
+                vm = getVirtualMachine(instance, serverId);
+                daseinVM = toServer(vm,"");
             }
             catch( TaskInProgress e ) {
                 throw new CloudException(e);
@@ -858,7 +915,12 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public void terminate(@Nonnull String serverId) throws InternalException, CloudException {
-        final String id = serverId;
+        terminate(serverId, "");
+    }
+
+    @Override
+    public void terminate(@Nonnull String vmId, String explanation)throws InternalException, CloudException{
+        final String id = vmId;
 
         provider.hold();
         Thread t = new Thread() {
@@ -867,15 +929,10 @@ public class Vm extends AbstractVMSupport {
                 finally { provider.release(); }
             }
         };
-        
-        t.setName("Terminate " + serverId);
+
+        t.setName("Terminate " + vmId);
         t.setDaemon(true);
         t.start();
-    }
-
-    @Override
-    public void terminate(@Nonnull String vmId, String explanation)throws InternalException, CloudException{
-        terminate(vmId);
     }
 
     private void terminateVm(@Nonnull String serverId) {
@@ -1047,6 +1104,16 @@ public class Vm extends AbstractVMSupport {
                     server.setPrivateAddresses(new RawAddress(guestInfo.getIpAddress()));
                     server.setPrivateDnsAddress(guestInfo.getIpAddress());
                 }
+
+                GuestNicInfo[] nicInfoArray = guestInfo.getNet();
+                if (nicInfoArray != null && nicInfoArray.length>0) {
+                    GuestNicInfo nicInfo = nicInfoArray[0];
+                    String net = nicInfo.getNetwork();
+                    if (net != null) {
+                        server.setProviderVlanId(net+"_"+dc);
+                    }
+                }
+
             }
 
             VirtualMachineRuntimeInfo runtime = vm.getRuntime();

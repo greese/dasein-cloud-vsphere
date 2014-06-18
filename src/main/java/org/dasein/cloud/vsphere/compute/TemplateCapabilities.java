@@ -103,7 +103,7 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
 
     @Override
     public boolean supportsImageCapture(@Nonnull MachineImageType type) throws CloudException, InternalException {
-        return type.equals(MachineImageType.VOLUME);
+        return MachineImageType.VOLUME.equals(type);
     }
 
     @Override
@@ -118,6 +118,6 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
 
     @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        return false;
+        return ImageClass.MACHINE.equals(cls);
     }
 }

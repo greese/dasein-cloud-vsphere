@@ -54,6 +54,7 @@ import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedEntityStatus;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInProgress;
+import com.vmware.vim25.VAppIPAssignmentInfo;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
 import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
 import com.vmware.vim25.VirtualDeviceConnectInfo;
@@ -68,6 +69,7 @@ import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineRuntimeInfo;
+import com.vmware.vim25.VmConfigInfo;
 import com.vmware.vim25.mo.ComputeResource;
 import com.vmware.vim25.mo.Datacenter;
 import com.vmware.vim25.mo.Folder;
@@ -329,31 +331,88 @@ public class Vm extends AbstractVMSupport {
                 String vlan = options.getVlanId();
                 if (vlan != null) {
                     String vlanOnly = vlan.substring(0, vlan.indexOf("_"));
-                    VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
-                    nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
 
-                    VirtualEthernetCard nic = new VirtualE1000();
-                    nic.setConnectable(new VirtualDeviceConnectInfo());
-                    nic.connectable.connected=true;
-                    nic.connectable.startConnected=true;
+                    // we don't need to do network config if the selected network
+                    // is part of the template config anyway
+                    boolean changeRequired = true;
+                    GuestNicInfo[] nics = template.getGuest().getNet();
+                    int count = nics.length;
+                    Integer[] keys = new Integer[count];
+                    for (int i = 0; i<count; i++) {
+                        if (nics[i].getNetwork().equals(vlanOnly)) {
+                            changeRequired = false;
+                        }
+                        else {
+                            keys[i] = nics[i].getDeviceConfigId();
+                        }
+                    }
 
-                    Description info = new Description();
-                    info.setLabel(vlanOnly);
-                    info.setSummary("Nic for network "+vlanOnly);
+                    if (changeRequired) {
+                        if (count > 0) {
+                            VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[keys.length+1];
+                            for (int j = 0; j<keys.length; j++) {
+                                VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                                nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
 
-                    VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
-                    nicBacking.setDeviceName(vlanOnly);
+                                VirtualEthernetCard nic = new VirtualE1000();
+                                nic.setKey(keys[j]);
 
-                    nic.setAddressType("generated");
-                    nic.setBacking(nicBacking);
-                    nic.setKey(0);
+                                nicSpec.setDevice(nic);
+                                machineSpecs[j]=nicSpec;
+                            }
+                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
 
-                    nicSpec.setDevice(nic);
+                            VirtualEthernetCard nic = new VirtualE1000();
+                            nic.setConnectable(new VirtualDeviceConnectInfo());
+                            nic.connectable.connected=true;
+                            nic.connectable.startConnected=true;
 
-                    VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[1];
-                    machineSpecs[0]=nicSpec;
+                            Description info = new Description();
+                            info.setLabel(vlanOnly);
+                            info.setSummary("Nic for network "+vlanOnly);
 
-                    config.setDeviceChange(machineSpecs);
+                            VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                            nicBacking.setDeviceName(vlanOnly);
+
+                            nic.setAddressType("generated");
+                            nic.setBacking(nicBacking);
+                            nic.setKey(0);
+
+                            nicSpec.setDevice(nic);
+
+                            machineSpecs[keys.length]=nicSpec;
+
+                            config.setDeviceChange(machineSpecs);
+                        }
+                        else {
+                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+
+                            VirtualEthernetCard nic = new VirtualE1000();
+                            nic.setConnectable(new VirtualDeviceConnectInfo());
+                            nic.connectable.connected=true;
+                            nic.connectable.startConnected=true;
+
+                            Description info = new Description();
+                            info.setLabel(vlanOnly);
+                            info.setSummary("Nic for network "+vlanOnly);
+
+                            VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                            nicBacking.setDeviceName(vlanOnly);
+
+                            nic.setAddressType("generated");
+                            nic.setBacking(nicBacking);
+                            nic.setKey(0);
+
+                            nicSpec.setDevice(nic);
+
+                            VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[1];
+                            machineSpecs[0]=nicSpec;
+
+                            config.setDeviceChange(machineSpecs);
+                        }
+                    }
                     // end networking section
                 }
 
@@ -1048,6 +1107,7 @@ public class Vm extends AbstractVMSupport {
             if( vminfo == null || vminfo.isTemplate() ) {
                 return null;
             }
+
             VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(vminfo.getGuestId());
             VirtualMachine server = new VirtualMachine();
             GuestInfo guest = vm.getGuest();
@@ -1055,6 +1115,7 @@ public class Vm extends AbstractVMSupport {
 
             if( addr != null ) {
                 if( isPublicIpAddress(addr) ) {
+
                     server.setPublicAddresses(new RawAddress(addr));
                 }
                 else {

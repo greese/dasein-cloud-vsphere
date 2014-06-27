@@ -208,4 +208,9 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
         }
         return architectures;
     }
+
+    @Override
+    public boolean supportsSpotVirtualMachines() throws InternalException, CloudException {
+        return false;
+    }
 }

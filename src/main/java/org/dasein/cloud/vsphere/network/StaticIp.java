@@ -21,6 +21,7 @@ package org.dasein.cloud.vsphere.network;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.concurrent.Future;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -145,6 +146,12 @@ public class StaticIp implements IpAddressSupport {
     @Override
     public @Nonnull Iterable<IpAddress> listIpPool(@Nonnull IPVersion version, boolean unassignedOnly) throws InternalException, CloudException {
         return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
+    public Future<Iterable<IpAddress>> listIpPoolConcurrently(@Nonnull IPVersion version, boolean unassignedOnly) throws InternalException, CloudException {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override

@@ -25,6 +25,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Random;
 
+import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -89,7 +90,7 @@ import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
 public class Vm extends AbstractVMSupport {
-
+    static private final Logger log = PrivateCloud.getLogger(Vm.class, "std");
     private PrivateCloud provider;
     
     Vm(@Nonnull PrivateCloud provider) {
@@ -335,16 +336,24 @@ public class Vm extends AbstractVMSupport {
                     // we don't need to do network config if the selected network
                     // is part of the template config anyway
                     boolean changeRequired = true;
-                    GuestNicInfo[] nics = template.getGuest().getNet();
-                    int count = nics.length;
+                    int count = 0;
                     Integer[] keys = new Integer[count];
-                    for (int i = 0; i<count; i++) {
-                        if (nics[i].getNetwork().equals(vlanOnly)) {
-                            changeRequired = false;
+                    GuestNicInfo[] nics = template.getGuest().getNet();
+                    if (nics != null) {
+                        count = nics.length;
+                        keys = new Integer[count];
+                        for (int i = 0; i<count; i++) {
+                            if (nics[i].getNetwork().equals(vlanOnly)) {
+                                changeRequired = false;
+                                break;
+                            }
+                            else {
+                                keys[i] = nics[i].getDeviceConfigId();
+                            }
                         }
-                        else {
-                            keys[i] = nics[i].getDeviceConfigId();
-                        }
+                    }
+                    else {
+                        log.warn("Unable to find network adapter info for template "+template.getName()+"("+template.getConfig().getInstanceUuid()+")");
                     }
 
                     if (changeRequired) {

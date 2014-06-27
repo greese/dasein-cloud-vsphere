@@ -248,6 +248,25 @@ public class PrivateCloud extends AbstractCloud {
         }
     }
 
+    public @Nullable Folder getNetworkFolder(ServiceInstance instance) throws InternalException, CloudException {
+        if( isClusterBased() ) {
+            String regionId = getContext().getRegionId();
+
+            if( regionId == null ) {
+                throw new CloudException("No region has been defined for this request");
+            }
+            Datacenter dc = getDataCenterServices().getVmwareDatacenterFromVDCId(instance, regionId);
+
+            if( dc == null ) {
+                return null;
+            }
+            return dc.getNetworkFolder();
+        }
+        else {
+            return instance.getRootFolder();
+        }
+    }
+
     public boolean isClusterBased() throws CloudException {
         ProviderContext ctx = getContext();
 

@@ -25,6 +25,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Random;
 
+import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -46,12 +47,20 @@ import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
+import com.vmware.vim25.Description;
 import com.vmware.vim25.GuestInfo;
+import com.vmware.vim25.GuestNicInfo;
 import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedEntityStatus;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInProgress;
+import com.vmware.vim25.VirtualDeviceConfigSpec;
+import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
+import com.vmware.vim25.VirtualDeviceConnectInfo;
+import com.vmware.vim25.VirtualE1000;
+import com.vmware.vim25.VirtualEthernetCard;
+import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigInfo;
@@ -79,6 +88,7 @@ import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
 public class Vm extends AbstractVMSupport {
+    static private final Logger log = PrivateCloud.getLogger(Vm.class, "std");
 
     private PrivateCloud provider;
     
@@ -315,6 +325,104 @@ public class Vm extends AbstractVMSupport {
                 config.setAnnotation(options.getMachineImageId());
                 config.setMemoryMB(memory);
                 config.setNumCPUs(cpuCount);
+
+                //networking section
+                //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
+                String vlan = options.getVlanId();
+                if (vlan != null) {
+                    String vlanOnly = vlan.substring(0, vlan.indexOf("_"));
+
+                    // we don't need to do network config if the selected network
+                    // is part of the template config anyway
+                    boolean changeRequired = true;
+                    int count = 0;
+                    Integer[] keys = new Integer[count];
+                    GuestNicInfo[] nics = template.getGuest().getNet();
+                    if (nics != null) {
+                        count = nics.length;
+                        keys = new Integer[count];
+                        for (int i = 0; i<count; i++) {
+                            if (nics[i].getNetwork().equals(vlanOnly)) {
+                                changeRequired = false;
+                                break;
+                            }
+                            else {
+                                keys[i] = nics[i].getDeviceConfigId();
+                            }
+                        }
+                    }
+                    else {
+                        log.warn("Unable to find network adapter info for template "+template.getName()+"("+template.getConfig().getInstanceUuid()+")");
+                    }
+
+                    if (changeRequired) {
+                        if (count > 0) {
+                            VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[keys.length+1];
+                            for (int j = 0; j<keys.length; j++) {
+                                VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                                nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+
+                                VirtualEthernetCard nic = new VirtualE1000();
+                                nic.setKey(keys[j]);
+
+                                nicSpec.setDevice(nic);
+                                machineSpecs[j]=nicSpec;
+                            }
+                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+
+                            VirtualEthernetCard nic = new VirtualE1000();
+                            nic.setConnectable(new VirtualDeviceConnectInfo());
+                            nic.connectable.connected=true;
+                            nic.connectable.startConnected=true;
+
+                            Description info = new Description();
+                            info.setLabel(vlanOnly);
+                            info.setSummary("Nic for network "+vlanOnly);
+
+                            VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                            nicBacking.setDeviceName(vlanOnly);
+
+                            nic.setAddressType("generated");
+                            nic.setBacking(nicBacking);
+                            nic.setKey(0);
+
+                            nicSpec.setDevice(nic);
+
+                            machineSpecs[keys.length]=nicSpec;
+
+                            config.setDeviceChange(machineSpecs);
+                        }
+                        else {
+                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+
+                            VirtualEthernetCard nic = new VirtualE1000();
+                            nic.setConnectable(new VirtualDeviceConnectInfo());
+                            nic.connectable.connected=true;
+                            nic.connectable.startConnected=true;
+
+                            Description info = new Description();
+                            info.setLabel(vlanOnly);
+                            info.setSummary("Nic for network "+vlanOnly);
+
+                            VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                            nicBacking.setDeviceName(vlanOnly);
+
+                            nic.setAddressType("generated");
+                            nic.setBacking(nicBacking);
+                            nic.setKey(0);
+
+                            nicSpec.setDevice(nic);
+
+                            VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[1];
+                            machineSpecs[0]=nicSpec;
+
+                            config.setDeviceChange(machineSpecs);
+                        }
+                    }
+                    // end networking section
+                }
 
                 VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
@@ -858,7 +966,12 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public void terminate(@Nonnull String serverId) throws InternalException, CloudException {
-        final String id = serverId;
+        terminate(serverId, "");
+    }
+
+    @Override
+    public void terminate(@Nonnull String vmId, String explanation)throws InternalException, CloudException{
+        final String id = vmId;
 
         provider.hold();
         Thread t = new Thread() {
@@ -867,15 +980,10 @@ public class Vm extends AbstractVMSupport {
                 finally { provider.release(); }
             }
         };
-        
-        t.setName("Terminate " + serverId);
+
+        t.setName("Terminate " + vmId);
         t.setDaemon(true);
         t.start();
-    }
-
-    @Override
-    public void terminate(@Nonnull String vmId, String explanation)throws InternalException, CloudException{
-        terminate(vmId);
     }
 
     private void terminateVm(@Nonnull String serverId) {
@@ -1039,7 +1147,6 @@ public class Vm extends AbstractVMSupport {
             server.setProviderDataCenterId(dc);
 
             GuestInfo guestInfo = vm.getGuest();
-            
             if( guestInfo != null ) {
                 String ipAddress = guestInfo.getIpAddress();
                 
@@ -1047,7 +1154,18 @@ public class Vm extends AbstractVMSupport {
                     server.setPrivateAddresses(new RawAddress(guestInfo.getIpAddress()));
                     server.setPrivateDnsAddress(guestInfo.getIpAddress());
                 }
+
+                GuestNicInfo[] nicInfoArray = guestInfo.getNet();
+                if (nicInfoArray != null && nicInfoArray.length>0) {
+                    GuestNicInfo nicInfo = nicInfoArray[0];
+                    String net = nicInfo.getNetwork();
+                    if (net != null) {
+                        server.setProviderVlanId(net+"_"+dc);
+                    }
+                }
             }
+
+
 
             VirtualMachineRuntimeInfo runtime = vm.getRuntime();
             

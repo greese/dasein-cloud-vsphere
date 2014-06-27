@@ -20,6 +20,8 @@ package org.dasein.cloud.vsphere.network;
 
 import org.dasein.cloud.network.AbstractNetworkServices;
 import org.dasein.cloud.vsphere.PrivateCloud;
+import org.dasein.cloud.network.VLAN;
+import org.dasein.cloud.network.VLANSupport;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -32,5 +34,11 @@ public class VMwareNetworkServices extends AbstractNetworkServices {
     public @Nullable StaticIp getIpAddressSupport() {
         return null;
         //return new StaticIp(cloud);
+    }
+
+    @Nullable
+    @Override
+    public VLANSupport getVlanSupport() {
+        return new VSphereNetwork(cloud);
     }
 }

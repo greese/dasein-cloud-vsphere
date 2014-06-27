@@ -146,7 +146,7 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public MachineImage getImage(@Nonnull String providerImageId) throws CloudException, InternalException {
-        for( ImageClass cls : listSupportedImageClasses() ) {
+        for( ImageClass cls : getCapabilities().listSupportedImageClasses() ) {
             for( MachineImage image : listImages(cls) ) {
                 if( image.getProviderMachineImageId().equals(providerImageId) ) {
                     return image;

@@ -46,6 +46,7 @@ import com.vmware.vim25.mo.ServiceInstance;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
+import java.util.Collections;
 
 public class Dc implements DataCenterServices {
 
@@ -251,6 +252,21 @@ public class Dc implements DataCenterServices {
         else {
             return listRegionsFromVDCs();
         }
+    }
+
+    @Override
+    public boolean supportsResourcePools() {
+        return false;
+    }
+
+    @Override
+    public Collection<org.dasein.cloud.dc.ResourcePool> listResourcePools( String providerDataCenterId ) throws InternalException, CloudException {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public org.dasein.cloud.dc.ResourcePool getResourcePool( String providerResourcePoolId ) throws InternalException, CloudException {
+        return null;
     }
 
     private @Nonnull Collection<Region> listRegionsFromVDCs() throws InternalException, CloudException {

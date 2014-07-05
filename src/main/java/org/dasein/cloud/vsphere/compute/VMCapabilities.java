@@ -18,10 +18,7 @@
 
 package org.dasein.cloud.vsphere.compute;
 
-import org.dasein.cloud.AbstractCapabilities;
-import org.dasein.cloud.CloudException;
-import org.dasein.cloud.InternalException;
-import org.dasein.cloud.Requirement;
+import org.dasein.cloud.*;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.ImageClass;
 import org.dasein.cloud.compute.Platform;
@@ -126,6 +123,16 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Override
     public NamingConstraints getVirtualMachineNamingConstraints() throws CloudException, InternalException {
         return NamingConstraints.getAlphaNumeric(1, 30).constrainedBy(new char[] {'-'}).lowerCaseOnly();
+    }
+
+    @Nullable
+    @Override
+    public VisibleScope getVirtualMachineVisibleScope() {
+        return null;
+    }
+
+    @Nullable @Override public VisibleScope getVirtualMachineProductVisibleScope() {
+        return null;
     }
 
     @Nonnull

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.Random;
 
 /**
  * User: daniellemayne
@@ -125,26 +126,56 @@ public class VSphereNetwork extends AbstractVLANSupport{
             ServiceInstance instance = getServiceInstance();
 
             ArrayList<VLAN> networkList=new ArrayList<VLAN>();
-
-            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, getContext().getRegionId());
-            DataCenter ourDC = provider.getDataCenterServices().listDataCenters(getContext().getRegionId()).iterator().next();
+            Datacenter dc;
             Network[] nets;
-            try {
-                nets = dc.getNetworks();
-                for(int d=0; d<nets.length; d++) {
-                    networkList.add(toVlan(nets[d], ourDC.getName()));
+            if (provider.isClusterBased()) {
+                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, getContext().getRegionId());
+                DataCenter ourDC = provider.getDataCenterServices().listDataCenters(getContext().getRegionId()).iterator().next();
+
+                try {
+                    nets = dc.getNetworks();
+                    for(int d=0; d<nets.length; d++) {
+                        networkList.add(toVlan(nets[d], ourDC.getName()));
+                    }
+                }
+                catch( InvalidProperty e ) {
+                    throw new CloudException("No network support in cluster: " + e.getMessage());
+                }
+                catch( RuntimeFault e ) {
+                    throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+                }
+                catch( RemoteException e ) {
+                    throw new CloudException("Error in cluster processing request: " + e.getMessage());
                 }
             }
-            catch( InvalidProperty e ) {
-                throw new CloudException("No network support in cluster: " + e.getMessage());
-            }
-            catch( RuntimeFault e ) {
-                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
-            }
-            catch( RemoteException e ) {
-                throw new CloudException("Error in cluster processing request: " + e.getMessage());
-            }
+            else {
+                String rid = getContext().getRegionId();
+                String dataCenterId = null;
+                if( rid != null ) {
+                    for( DataCenter dsdc : provider.getDataCenterServices().listDataCenters(rid) ) {
+                        dataCenterId = dsdc.getProviderDataCenterId();
+                        dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
 
+                        DataCenter ourDC = provider.getDataCenterServices().listDataCenters(getContext().getRegionId()).iterator().next();
+
+                        try {
+                            nets = dc.getNetworks();
+                            for(int d=0; d<nets.length; d++) {
+                                networkList.add(toVlan(nets[d], ourDC.getName()));
+                            }
+                        }
+                        catch( InvalidProperty e ) {
+                            throw new CloudException("No network support in cluster: " + e.getMessage());
+                        }
+                        catch( RuntimeFault e ) {
+                            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+                        }
+                        catch( RemoteException e ) {
+                            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+                        }
+                    }
+                }
+            }
             return networkList;
         }
         finally {

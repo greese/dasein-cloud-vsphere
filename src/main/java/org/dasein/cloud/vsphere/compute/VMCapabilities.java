@@ -128,13 +128,11 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Nullable
     @Override
     public VisibleScope getVirtualMachineVisibleScope() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
-    @Nullable
-    @Override
-    public VisibleScope getVirtualMachineProductVisibleScope() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    @Nullable @Override public VisibleScope getVirtualMachineProductVisibleScope() {
+        return null;
     }
 
     @Nonnull

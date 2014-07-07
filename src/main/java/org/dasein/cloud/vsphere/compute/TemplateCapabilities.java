@@ -67,7 +67,7 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     @Nullable
     @Override
     public VisibleScope getImageVisibleScope() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     @Nonnull

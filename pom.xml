@@ -88,8 +88,8 @@
         <optional>false</optional>
     </dependency>  -->
       <dependency>
-          <groupId>vijava</groupId>
-          <artifactId>vsphere-sdk</artifactId>
+          <groupId>com.vmware</groupId>
+          <artifactId>vijava</artifactId>
           <version>5.5-beta</version>
       </dependency>
       <dependency>
@@ -253,7 +253,7 @@
           <excludes>
             <exclude>**/TestSuite.java</exclude>
           </excludes>
-           <!-- <argLine>-Ddasein.inclusions=StatelessVMTests,StatefulVMTests.terminate</argLine> -->
+          <!--  <argLine>-Ddasein.inclusions=StatelessDCTests</argLine> -->
         </configuration>
       </plugin>  
       <plugin>

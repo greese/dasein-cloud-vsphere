@@ -274,7 +274,8 @@ public class PrivateCloud extends AbstractCloud {
             throw new CloudException("No context was set for this request");
         }
         Properties p = ctx.getCustomProperties();
-        boolean cluster = true;
+       //todo
+       boolean cluster = true;
 
         if( p != null ) {
             String b = p.getProperty("clusterBased", "true");

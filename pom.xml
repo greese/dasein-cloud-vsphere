@@ -253,7 +253,7 @@
           <excludes>
             <exclude>**/TestSuite.java</exclude>
           </excludes>
-           <!-- <argLine>-Ddasein.inclusions=StatelessVMTests,StatefulVMTests.terminate</argLine> -->
+          <!--  <argLine>-Ddasein.inclusions=StatelessDCTests</argLine> -->
         </configuration>
       </plugin>  
       <plugin>

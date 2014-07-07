@@ -145,8 +145,14 @@ public class Vm extends AbstractVMSupport {
                 throw new CloudException("Virtual machine " + vm + " has no data center parent");
             }
             name = validateName(name);
-            
-            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, /*dcId*/ getContext().getRegionId());
+
+            Datacenter dc = null;
+            if (provider.isClusterBased()) {
+                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, /*dcId*/ getContext().getRegionId());
+            }
+            else {
+                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dcId);
+            }
             ResourcePool pool = vm.getResourcePool();
 
             if( dc == null ) {
@@ -291,27 +297,44 @@ public class Vm extends AbstractVMSupport {
                     if( vdc == null ) {
                         throw new CloudException("Unable to identify VDC " + dc.getRegionId());
                     }
-                    ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(service, dataCenterId);
 
-                    if( pool != null ) {
-                        pools = new ManagedEntity[] { pool };
+                    if (options.getResourcePoolId() == null) {
+                        ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(service, dataCenterId);
+                        if( pool != null ) {
+                            pools = new ManagedEntity[] { pool };
+                        }
                     }
                 }
                 else {
                     vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dataCenterId);
-                    pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
+                    if (options.getResourcePoolId() == null) {
+                        pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
+                    }
                 }
             }
             if( vdc == null ) {
                 if( provider.isClusterBased() ) {
                     vdc = getVmwareDatacenter(template);
-                    pools = randomize(new InventoryNavigator(vdc).searchManagedEntities("ResourcePool"));
+                    if (options.getResourcePoolId() == null) {
+                        pools = randomize(new InventoryNavigator(vdc).searchManagedEntities("ResourcePool"));
+                    }
+
                 }
                 if( vdc == null ) {
                     throw new CloudException("Could not identify a valid data center (" + dataCenterId + " attempted)");
                 }
             }
             CloudException lastError = null;
+
+            if (options.getResourcePoolId() != null) {
+                ResourcePool pool = provider.getDataCenterServices().getVMWareResourcePool(options.getResourcePoolId());
+                if (pool != null) {
+                    pools = new ManagedEntity[] {pool};
+                }
+                else {
+                    throw new CloudException("Unable to find resource pool with id "+options.getResourcePoolId());
+                }
+            }
 
             for( ManagedEntity p : pools ) {
                 ResourcePool pool = (ResourcePool)p;
@@ -427,7 +450,6 @@ public class Vm extends AbstractVMSupport {
 
                 VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
-
 
                 location.setPool(pool.getConfig().getEntity());
 
@@ -1164,6 +1186,22 @@ public class Vm extends AbstractVMSupport {
                 return null;
             }
             server.setProviderDataCenterId(dc);
+
+            try {
+                ResourcePool rp = vm.getResourcePool();
+                if (rp != null) {
+                    server.setResourcePoolId(rp.getName());
+                }
+            }
+            catch (InvalidProperty ex) {
+                throw new CloudException(ex);
+            }
+            catch (RuntimeFault ex) {
+                throw new CloudException(ex);
+            }
+            catch (RemoteException ex) {
+                throw new CloudException(ex);
+            }
 
             GuestInfo guestInfo = vm.getGuest();
             

@@ -32,6 +32,7 @@ import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.dc.DataCenter;
+import org.dasein.cloud.dc.DataCenterCapabilities;
 import org.dasein.cloud.dc.DataCenterServices;
 import org.dasein.cloud.dc.Region;
 
@@ -73,7 +74,17 @@ public class Dc implements DataCenterServices {
         }
         return instance;
     }
-    
+
+    private transient volatile DCCapabilities capabilities;
+    @Nonnull
+    @Override
+    public DataCenterCapabilities getCapabilities() throws InternalException, CloudException {
+        if( capabilities == null ) {
+            capabilities = new DCCapabilities(provider);
+        }
+        return capabilities;
+    }
+
     @Override
     public @Nullable DataCenter getDataCenter(@Nonnull String dcId) throws InternalException, CloudException {
         String regionId = getContext().getRegionId();
@@ -255,17 +266,125 @@ public class Dc implements DataCenterServices {
     }
 
     @Override
-    public boolean supportsResourcePools() {
-        return false;
+    public Collection<org.dasein.cloud.dc.ResourcePool> listResourcePools(String providerDataCenterId) throws InternalException, CloudException {
+        ArrayList<org.dasein.cloud.dc.ResourcePool> list = new ArrayList<org.dasein.cloud.dc.ResourcePool>();
+        Iterable<ResourcePool> rps= null;
+        if (provider.isClusterBased()) {
+            rps = listResourcePoolsForCluster(providerDataCenterId);
+        }
+        else {
+            rps = listResourcePoolsForDatacenter(providerDataCenterId);
+        }
+
+        for (ResourcePool rp : rps) {
+            list.add(toResourcePool(rp, providerDataCenterId));
+        }
+        return list;
+    }
+
+    private Collection<ResourcePool> listResourcePoolsForCluster(String providerDataCenterId) throws InternalException, CloudException {
+        ServiceInstance instance = getServiceInstance();
+        DataCenter dsdc = getDataCenter(providerDataCenterId);
+
+        if( dsdc == null ) {
+            return null;
+        }
+        Datacenter dc = getVmwareDatacenterFromVDCId(instance, dsdc.getRegionId());
+
+        if( dc == null ) {
+            return null;
+        }
+
+        ManagedEntity[] clusters;
+
+        try {
+            clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
+        ArrayList<ResourcePool> list = new ArrayList<ResourcePool>();
+        for( ManagedEntity entity : clusters ) {
+            ClusterComputeResource cluster = (ClusterComputeResource)entity;
+
+            ResourcePool rp = cluster.getResourcePool();
+            list.add(rp);
+        }
+
+        return list;
+    }
+
+    private Collection<ResourcePool> listResourcePoolsForDatacenter(String dataCenterId) throws InternalException, CloudException {
+        ServiceInstance instance = getServiceInstance();
+        DataCenter dsdc = getDataCenter(dataCenterId);
+
+        if( dsdc == null ) {
+            return null;
+        }
+        Datacenter dc = getVmwareDatacenterFromVDCId(instance, dataCenterId);
+
+        if( dc == null ) {
+            return null;
+        }
+        ManagedEntity[] pools = null;
+        try {
+            pools = new InventoryNavigator(dc).searchManagedEntities("ResourcePool");
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException(e);
+        }
+        catch( RuntimeFault e ) {
+            throw new InternalException(e);
+        }
+        catch( RemoteException e ) {
+            throw new CloudException(e);
+        }
+        ArrayList<ResourcePool> list = new ArrayList<ResourcePool>();
+        for( ManagedEntity entity : pools ) {
+            ResourcePool rp = (ResourcePool)entity;
+            list.add(rp);
+        }
+
+        return list;
     }
 
     @Override
-    public Collection<org.dasein.cloud.dc.ResourcePool> listResourcePools( String providerDataCenterId ) throws InternalException, CloudException {
-        return Collections.emptyList();
+    public org.dasein.cloud.dc.ResourcePool getResourcePool(String providerResourcePoolId) throws InternalException, CloudException {
+        Iterable<DataCenter> dcs = listDataCenters(getContext().getRegionId());
+
+        for (DataCenter dc : dcs) {
+            Iterable<org.dasein.cloud.dc.ResourcePool> rps = listResourcePools(dc.getProviderDataCenterId());
+            for (org.dasein.cloud.dc.ResourcePool rp : rps) {
+                if (rp.getProvideResourcePoolId().equals(providerResourcePoolId)) {
+                    return rp;
+                }
+            }
+        }
+        return null;
     }
 
-    @Override
-    public org.dasein.cloud.dc.ResourcePool getResourcePool( String providerResourcePoolId ) throws InternalException, CloudException {
+    public ResourcePool getVMWareResourcePool(String providerResourcePoolId) throws InternalException, CloudException {
+        Iterable<DataCenter> dcs = listDataCenters(getContext().getRegionId());
+        Iterable<ResourcePool> rps;
+        for (DataCenter dc : dcs) {
+            if (provider.isClusterBased()) {
+                rps = listResourcePoolsForCluster(dc.getProviderDataCenterId());
+            }
+            else {
+                rps = listResourcePoolsForDatacenter(dc.getProviderDataCenterId());
+            }
+            for (ResourcePool rp : rps) {
+                if (rp.getName().equals(providerResourcePoolId)) {
+                    return rp;
+                }
+            }
+        }
         return null;
     }
 
@@ -373,8 +492,26 @@ public class Dc implements DataCenterServices {
         
         region.setActive(true);
         region.setAvailable(true);
+        region.setJurisdiction("US");
         region.setName(regionId);
         region.setProviderRegionId(regionId);
         return region;        
+    }
+
+    private org.dasein.cloud.dc.ResourcePool toResourcePool(@Nonnull ResourcePool resourcePool, @Nonnull String dataCenterId) {
+        org.dasein.cloud.dc.ResourcePool rp = new org.dasein.cloud.dc.ResourcePool();
+        rp.setName(resourcePool.getName());
+        rp.setProvideResourcePoolId(resourcePool.getName());
+        rp.setDataCenterId(dataCenterId);
+
+        ManagedEntityStatus status = resourcePool.getRuntime().getOverallStatus();
+        if (status.equals(ManagedEntityStatus.red) || status.equals(ManagedEntityStatus.yellow)) {
+            rp.setAvailable(false);
+        }
+        else {
+            rp.setAvailable(true);
+        }
+
+        return rp;
     }
 }

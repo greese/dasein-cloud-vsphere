@@ -45,6 +45,8 @@ import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
+import org.dasein.cloud.util.Cache;
+import org.dasein.cloud.util.CacheLevel;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import com.vmware.vim25.Description;
@@ -70,7 +72,6 @@ import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineRuntimeInfo;
-import com.vmware.vim25.VmConfigInfo;
 import com.vmware.vim25.mo.ComputeResource;
 import com.vmware.vim25.mo.Datacenter;
 import com.vmware.vim25.mo.Folder;
@@ -84,6 +85,8 @@ import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
 import org.dasein.util.uom.storage.Megabyte;
 import org.dasein.util.uom.storage.Storage;
+import org.dasein.util.uom.time.Minute;
+import org.dasein.util.uom.time.TimePeriod;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -147,8 +150,9 @@ public class Vm extends AbstractVMSupport {
             name = validateName(name);
 
             Datacenter dc = null;
-            if (provider.isClusterBased()) {
-                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, /*dcId*/ getContext().getRegionId());
+            DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dcId);
+            if (ourDC != null) {
+                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, ourDC.getRegionId());
             }
             else {
                 dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dcId);
@@ -268,6 +272,11 @@ public class Vm extends AbstractVMSupport {
             }
             String hostName = validateName(options.getHostName());
             String dataCenterId = options.getDataCenterId();
+            String resourceProductStr = options.getStandardProductId();
+            String[] items = resourceProductStr.split(":");
+            if (items.length==3) {
+                options.withResourcePoolId(items[0]);
+            }
 
             if( dataCenterId == null ) {
                 String rid = ctx.getRegionId();
@@ -286,16 +295,12 @@ public class Vm extends AbstractVMSupport {
             Datacenter vdc = null;
 
             if( dataCenterId != null ) {
-                if( provider.isClusterBased() ) {
-                    DataCenter dc = provider.getDataCenterServices().getDataCenter(dataCenterId);
-
-                    if( dc == null ) {
-                        throw new CloudException("No such data center: " + dataCenterId);
-                    }
-                    vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dc.getRegionId());
+                DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dataCenterId);
+                if (ourDC != null) {
+                    vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, ourDC.getRegionId());
 
                     if( vdc == null ) {
-                        throw new CloudException("Unable to identify VDC " + dc.getRegionId());
+                        throw new CloudException("Unable to identify VDC " + dataCenterId);
                     }
 
                     if (options.getResourcePoolId() == null) {
@@ -312,7 +317,9 @@ public class Vm extends AbstractVMSupport {
                     }
                 }
             }
+            /* not entirely sure this is ever reached
             if( vdc == null ) {
+
                 if( provider.isClusterBased() ) {
                     vdc = getVmwareDatacenter(template);
                     if (options.getResourcePoolId() == null) {
@@ -323,7 +330,8 @@ public class Vm extends AbstractVMSupport {
                 if( vdc == null ) {
                     throw new CloudException("Could not identify a valid data center (" + dataCenterId + " attempted)");
                 }
-            }
+            } */
+
             CloudException lastError = null;
 
             if (options.getResourcePoolId() != null) {
@@ -342,8 +350,16 @@ public class Vm extends AbstractVMSupport {
 
                 VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
                 String[] vmInfo = options.getStandardProductId().split(":");
-                int cpuCount = Integer.parseInt(vmInfo[0]);
-                long memory = Long.parseLong(vmInfo[1]);
+                int cpuCount;
+                long memory;
+                if (vmInfo.length == 2) {
+                    cpuCount = Integer.parseInt(vmInfo[0]);
+                    memory = Long.parseLong(vmInfo[1]);
+                }
+                else {
+                    cpuCount = Integer.parseInt(vmInfo[1]);
+                    memory = Long.parseLong(vmInfo[2]);
+                }
 
                 config.setName(hostName);
                 config.setAnnotation(options.getMachineImageId());
@@ -354,7 +370,6 @@ public class Vm extends AbstractVMSupport {
                 //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
                 String vlan = options.getVlanId();
                 if (vlan != null) {
-                    String vlanOnly = vlan.substring(0, vlan.indexOf("_"));
 
                     // we don't need to do network config if the selected network
                     // is part of the template config anyway
@@ -366,7 +381,7 @@ public class Vm extends AbstractVMSupport {
                         count = nics.length;
                         keys = new Integer[count];
                         for (int i = 0; i<count; i++) {
-                            if (nics[i].getNetwork().equals(vlanOnly)) {
+                            if (nics[i].getNetwork().equals(vlan)) {
                                 changeRequired = false;
                                 break;
                             }
@@ -401,11 +416,11 @@ public class Vm extends AbstractVMSupport {
                             nic.connectable.startConnected=true;
 
                             Description info = new Description();
-                            info.setLabel(vlanOnly);
-                            info.setSummary("Nic for network "+vlanOnly);
+                            info.setLabel(vlan);
+                            info.setSummary("Nic for network "+vlan);
 
                             VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
-                            nicBacking.setDeviceName(vlanOnly);
+                            nicBacking.setDeviceName(vlan);
 
                             nic.setAddressType("generated");
                             nic.setBacking(nicBacking);
@@ -427,11 +442,11 @@ public class Vm extends AbstractVMSupport {
                             nic.connectable.startConnected=true;
 
                             Description info = new Description();
-                            info.setLabel(vlanOnly);
-                            info.setSummary("Nic for network "+vlanOnly);
+                            info.setLabel(vlan);
+                            info.setSummary("Nic for network "+vlan);
 
                             VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
-                            nicBacking.setDeviceName(vlanOnly);
+                            nicBacking.setDeviceName(vlan);
 
                             nic.setAddressType("generated");
                             nic.setBacking(nicBacking);
@@ -452,7 +467,6 @@ public class Vm extends AbstractVMSupport {
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
 
                 location.setPool(pool.getConfig().getEntity());
-
                 spec.setLocation(location);
                 spec.setPowerOn(false);
                 spec.setTemplate(false);
@@ -536,26 +550,6 @@ public class Vm extends AbstractVMSupport {
         return possibles.iterator().next();
     }
 
-    /*
-    private Collection<ClusterComputeResource> getClusters(@Nonnull Datacenter dc) throws CloudException, InternalException {
-        ArrayList<ClusterComputeResource> list = new ArrayList<ClusterComputeResource>();
-
-        try {
-            for( ManagedEntity me : dc.getHostFolder().getChildEntity() ) {
-                ClusterComputeResource cluster = (ClusterComputeResource)me;
-
-                if( !cluster.getConfigStatus().equals(ManagedEntityStatus.red) ) {
-                    list.add(cluster);
-                }
-            }
-        }
-        catch( RemoteException e ) {
-            throw new CloudException(e);
-        }
-        return list;
-    }
-    */
-
     @Nonnull Collection<HostSystem> getPossibleHosts(@Nonnull Datacenter dc) throws CloudException, RemoteException {
         ArrayList<HostSystem> possibles = new ArrayList<HostSystem>();
 
@@ -577,28 +571,12 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nullable String getDataCenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
-        if( provider.isClusterBased() ) {
-            try {
-                return vm.getResourcePool().getOwner().getName();
-            }
-            catch( RemoteException e ) {
-                throw new CloudException(e);
-            }
+        try {
+            return vm.getResourcePool().getOwner().getName();
         }
-        else {
-            ManagedEntity parent = vm.getParent();
-
-            if( parent == null ) {
-                parent = vm.getParentVApp();
-            }
-            while( parent != null ) {
-                if( parent instanceof Datacenter ) {
-                    return parent.getName();
-                }
-                parent = parent.getParent();
-            }
+        catch( RemoteException e ) {
+            throw new CloudException(e);
         }
-        return null;
     }
 
     @Override
@@ -688,11 +666,26 @@ public class Vm extends AbstractVMSupport {
     public @Nonnull Collection<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture) throws InternalException, CloudException {
         ArrayList<VirtualMachineProduct> sizes = new ArrayList<VirtualMachineProduct>();
 
-        for( Architecture a : listSupportedArchitectures() ) {
+        Cache<org.dasein.cloud.dc.ResourcePool> cache = Cache.getInstance(provider, "resourcePools", org.dasein.cloud.dc.ResourcePool.class, CacheLevel.REGION_ACCOUNT, new TimePeriod<Minute>(15, TimePeriod.MINUTE));
+        Collection<org.dasein.cloud.dc.ResourcePool> rps = (Collection<org.dasein.cloud.dc.ResourcePool>)cache.get(getContext());
+
+        if( rps == null ) {
+            Collection<DataCenter> dcs = provider.getDataCenterServices().listDataCenters(getContext().getRegionId());
+            rps = new ArrayList<org.dasein.cloud.dc.ResourcePool>();
+
+            for (DataCenter dc : dcs) {
+                Collection<org.dasein.cloud.dc.ResourcePool> pools = provider.getDataCenterServices().listResourcePools(dc.getProviderDataCenterId());
+                rps.addAll(pools);
+            }
+            cache.put(getContext(),rps);
+        }
+
+        for( Architecture a : getCapabilities().listSupportedArchitectures() ) {
             if( a.equals(architecture) ) {
                 if( a.equals(Architecture.I32) ) {
                     for( int cpu : new int[] { 1, 2 } ) {
                         for( int ram : new int[] { 512, 1024, 2048 } ) {
+                            // add in product without pool
                             VirtualMachineProduct product = new VirtualMachineProduct();
 
                             product.setCpuCount(cpu);
@@ -702,12 +695,25 @@ public class Vm extends AbstractVMSupport {
                             product.setProviderProductId(cpu + ":" + ram);
                             product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
                             sizes.add(product);
+
+                            //resource pools
+                            for (org.dasein.cloud.dc.ResourcePool pool : rps) {
+                                product = new VirtualMachineProduct();
+                                product.setCpuCount(cpu);
+                                product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                                product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                                product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
+                                product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                sizes.add(product);
+                            }
                         }
                     }
                 }
                 else {
                     for( int cpu : new int[] { 1, 2, 4, 8 } ) {
                         for( int ram : new int[] { 1024, 2048, 4096, 10240, 20480 } ) {
+                            // add in product without pool
                             VirtualMachineProduct product = new VirtualMachineProduct();
 
                             product.setCpuCount(cpu);
@@ -717,6 +723,18 @@ public class Vm extends AbstractVMSupport {
                             product.setProviderProductId(cpu + ":" + ram);
                             product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
                             sizes.add(product);
+
+                            //resource pools
+                            for (org.dasein.cloud.dc.ResourcePool pool : rps) {
+                                product = new VirtualMachineProduct();
+                                product.setCpuCount(cpu);
+                                product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                                product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                                product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
+                                product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                sizes.add(product);
+                            }
                         }
                     }
                 }
@@ -925,19 +943,9 @@ public class Vm extends AbstractVMSupport {
 
         com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
 
-        VirtualMachine daseinVM = toServer(vm,"");
         if( vm != null ) {
             try {
                 vm.suspendVM_Task();
-                vm = getVirtualMachine(instance, serverId);
-                daseinVM = toServer(vm,"");
-
-                try {
-                    Thread.sleep(CalendarWrapper.MINUTE*5);
-                }
-                catch (InterruptedException ignore) {}
-                vm = getVirtualMachine(instance, serverId);
-                daseinVM = toServer(vm,"");
             }
             catch( TaskInProgress e ) {
                 throw new CloudException(e);
@@ -1185,12 +1193,19 @@ public class Vm extends AbstractVMSupport {
             if( dc == null ) {
                 return null;
             }
-            server.setProviderDataCenterId(dc);
+            DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dc);
+            if (ourDC != null) {
+                server.setProviderDataCenterId(dc);
+            }
+            else {
+                server.setProviderDataCenterId(dc+"-a");
+            }
 
             try {
                 ResourcePool rp = vm.getResourcePool();
                 if (rp != null) {
-                    server.setResourcePoolId(rp.getName());
+                    String id = provider.getDataCenterServices().getIdForResourcePool(rp);
+                    server.setResourcePoolId(id);
                 }
             }
             catch (InvalidProperty ex) {
@@ -1218,7 +1233,7 @@ public class Vm extends AbstractVMSupport {
                     GuestNicInfo nicInfo = nicInfoArray[0];
                     String net = nicInfo.getNetwork();
                     if (net != null) {
-                        server.setProviderVlanId(net+"_"+dc);
+                        server.setProviderVlanId(net);
                     }
                 }
 
@@ -1233,6 +1248,7 @@ public class Vm extends AbstractVMSupport {
                     switch( state ) {
                         case suspended:
                             server.setCurrentState(VmState.SUSPENDED);
+                            break;
                         case poweredOff:
                             server.setCurrentState(VmState.STOPPED);
                             break;

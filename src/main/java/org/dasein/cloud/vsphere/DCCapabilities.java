@@ -17,12 +17,12 @@ public class DCCapabilities extends AbstractCapabilities<PrivateCloud> implement
     }
     @Override
     public String getProviderTermForDataCenter(Locale locale) {
-        return "data center";
+        return "cluster";
     }
 
     @Override
     public String getProviderTermForRegion(Locale locale) {
-        return "region";
+        return "datacenter";
     }
 
     @Override

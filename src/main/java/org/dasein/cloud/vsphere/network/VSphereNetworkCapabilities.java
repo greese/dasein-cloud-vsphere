@@ -97,7 +97,7 @@ public class VSphereNetworkCapabilities extends AbstractCapabilities<PrivateClou
     @Nullable
     @Override
     public VisibleScope getVLANVisibleScope() {
-        return null;
+        return VisibleScope.ACCOUNT_REGION;
     }
 
     @Nonnull
@@ -118,7 +118,7 @@ public class VSphereNetworkCapabilities extends AbstractCapabilities<PrivateClou
 
     @Override
     public boolean isVlanDataCenterConstrained() throws CloudException, InternalException {
-        return true;
+        return false;
     }
 
     @Nonnull

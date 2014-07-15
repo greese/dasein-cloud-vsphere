@@ -102,12 +102,12 @@ public class Dc implements DataCenterServices {
 
     @Override
     public @Nonnull String getProviderTermForDataCenter(@Nonnull Locale locale) {
-        return "data center";
+        return "cluster";
     }
 
     @Override
     public @Nonnull String getProviderTermForRegion(@Nonnull Locale locale) {
-        return "region";
+        return "data center";
     }
 
     @Override
@@ -140,7 +140,7 @@ public class Dc implements DataCenterServices {
             clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
         }
         catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+            throw new CloudException("No cluster support in datacenter: " + e.getMessage());
         }
         catch( RuntimeFault e ) {
             throw new CloudException("Error in processing request to cluster: " + e.getMessage());
@@ -177,12 +177,19 @@ public class Dc implements DataCenterServices {
 
     @Override
     public @Nonnull Collection<DataCenter> listDataCenters(@Nonnull String regionId) throws InternalException, CloudException {
-
-        if( !provider.isClusterBased() ) {
-            return listDataCentersFromVDCs(regionId);
+        Collection<DataCenter> clusters = listDataCentersFromClusters(regionId);
+        if (clusters != null && clusters.size() > 0) {
+            return clusters;
         }
         else {
-            return listDataCentersFromClusters(regionId);
+            // create a dummy dc based on the region (vSphere datacenter)
+            DataCenter dc = new DataCenter();
+            dc.setAvailable(true);
+            dc.setActive(true);
+            dc.setName(regionId);
+            dc.setRegionId(regionId);
+            dc.setProviderDataCenterId(regionId+"-a");
+            return Collections.singletonList(dc);
         }
     }
 
@@ -192,7 +199,7 @@ public class Dc implements DataCenterServices {
         Datacenter dc = getVmwareDatacenterFromVDCId(instance, regionId);
 
         if( dc == null ) {
-            throw new CloudException("No such region: " + regionId);
+            throw new CloudException("No such dc: " + regionId);
         }
 
         ManagedEntity[] clusters;
@@ -201,7 +208,7 @@ public class Dc implements DataCenterServices {
             clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
         }
         catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+            throw new CloudException("No cluster support in datacenter: " + e.getMessage());
         }
         catch( RuntimeFault e ) {
             throw new CloudException("Error in processing request to cluster: " + e.getMessage());
@@ -221,59 +228,21 @@ public class Dc implements DataCenterServices {
         return dataCenters;
     }
 
-    private @Nonnull Collection<DataCenter> listDataCentersFromVDCs(@Nonnull String regionId) throws InternalException, CloudException {
-        ArrayList<DataCenter> dataCenters = new ArrayList<DataCenter>();
-        ServiceInstance instance = getServiceInstance();
-
-        Folder rootFolder = instance.getRootFolder();
-
-        ManagedEntity[] mes;
-
-        try {
-            mes = new InventoryNavigator(rootFolder).searchManagedEntities("Datacenter");
-        }
-        catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
-        }
-        catch( RuntimeFault e ) {
-            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
-        }
-        catch( RemoteException e ) {
-            throw new CloudException("Error in cluster processing request: " + e.getMessage());
-        }
-
-        if( mes == null || mes.length < 1 ) {
-            return dataCenters;
-        }
-        for( ManagedEntity entity : mes ) {
-            DataCenter dc = toDataCenter((Datacenter)entity, regionId);
-
-            if( dc != null ) {
-                dataCenters.add(dc);
-            }
-        }
-        return dataCenters;
-    }
-
     @Override
     public @Nonnull Collection<Region> listRegions() throws InternalException, CloudException {
-        if( !provider.isClusterBased() ) {
-            return listRegionsFromEndpoints();
-        }
-        else {
-            return listRegionsFromVDCs();
-        }
+        return listRegionsFromVDCs();
     }
 
     @Override
     public Collection<org.dasein.cloud.dc.ResourcePool> listResourcePools(String providerDataCenterId) throws InternalException, CloudException {
         ArrayList<org.dasein.cloud.dc.ResourcePool> list = new ArrayList<org.dasein.cloud.dc.ResourcePool>();
         Iterable<ResourcePool> rps= null;
-        if (provider.isClusterBased()) {
-            rps = listResourcePoolsForCluster(providerDataCenterId);
+        DataCenter ourDC = provider.getDataCenterServices().getDataCenter(providerDataCenterId);
+        if (ourDC.getProviderDataCenterId().endsWith("-a")) {
+            rps = listResourcePoolsForDatacenter(ourDC.getRegionId());
         }
         else {
-            rps = listResourcePoolsForDatacenter(providerDataCenterId);
+            rps = listResourcePoolsForCluster(providerDataCenterId);
         }
 
         for (ResourcePool rp : rps) {
@@ -297,11 +266,23 @@ public class Dc implements DataCenterServices {
 
         ManagedEntity[] clusters;
 
+        ArrayList<ResourcePool> list = new ArrayList<ResourcePool>();
         try {
             clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
+
+            for( ManagedEntity entity : clusters ) {
+
+                ClusterComputeResource cluster = (ClusterComputeResource)entity;
+                if (cluster.getName().equals(providerDataCenterId)) {
+                    ResourcePool root = cluster.getResourcePool();
+                    if (root.getResourcePools() != null && root.getResourcePools().length > 0) {
+                        getChildren(root.getResourcePools(), list);
+                    }
+                }
+            }
         }
         catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+            throw new CloudException("No cluster support in datacenter: " + e.getMessage());
         }
         catch( RuntimeFault e ) {
             throw new CloudException("Error in processing request to cluster: " + e.getMessage());
@@ -309,15 +290,28 @@ public class Dc implements DataCenterServices {
         catch( RemoteException e ) {
             throw new CloudException("Error in cluster processing request: " + e.getMessage());
         }
-        ArrayList<ResourcePool> list = new ArrayList<ResourcePool>();
-        for( ManagedEntity entity : clusters ) {
-            ClusterComputeResource cluster = (ClusterComputeResource)entity;
-
-            ResourcePool rp = cluster.getResourcePool();
-            list.add(rp);
-        }
 
         return list;
+    }
+
+    private void getChildren(ResourcePool[] pools, ArrayList<ResourcePool> list) throws CloudException, InternalException {
+        try {
+            for (ResourcePool r : pools) {
+                list.add(r);
+                if (r.getResourcePools() != null && r.getResourcePools().length > 0) {
+                    getChildren(r.getResourcePools(), list);
+                }
+            }
+        }
+        catch( InvalidProperty e ) {
+            throw new CloudException("No resource pool support in cluster: " + e.getMessage());
+        }
+        catch( RuntimeFault e ) {
+            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+        }
+        catch( RemoteException e ) {
+            throw new CloudException("Error in cluster processing request: " + e.getMessage());
+        }
     }
 
     private Collection<ResourcePool> listResourcePoolsForDatacenter(String dataCenterId) throws InternalException, CloudException {
@@ -373,11 +367,11 @@ public class Dc implements DataCenterServices {
         Iterable<DataCenter> dcs = listDataCenters(getContext().getRegionId());
         Iterable<ResourcePool> rps;
         for (DataCenter dc : dcs) {
-            if (provider.isClusterBased()) {
-                rps = listResourcePoolsForCluster(dc.getProviderDataCenterId());
+            if (dc.getProviderDataCenterId().endsWith("-a")) {
+                rps = listResourcePoolsForDatacenter(dc.getRegionId());
             }
             else {
-                rps = listResourcePoolsForDatacenter(dc.getProviderDataCenterId());
+                rps = listResourcePoolsForCluster(dc.getProviderDataCenterId());
             }
             for (ResourcePool rp : rps) {
                 if (rp.getName().equals(providerResourcePoolId)) {
@@ -399,10 +393,10 @@ public class Dc implements DataCenterServices {
             mes = new InventoryNavigator(rootFolder).searchManagedEntities("Datacenter");
         }
         catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+            throw new CloudException("No datacenter support: " + e.getMessage());
         }
         catch( RuntimeFault e ) {
-            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+            throw new CloudException("Error in processing request: " + e.getMessage());
         }
         catch( RemoteException e ) {
             throw new CloudException("Error in cluster processing request: " + e.getMessage());
@@ -417,28 +411,6 @@ public class Dc implements DataCenterServices {
             if( r != null ) {
                 regions.add(r);
             }
-        }
-        return regions;
-    }
-
-    private @Nonnull String getRegionId(@Nonnull String endpoint) {
-        try {
-            URI uri = new URI(endpoint);
-
-            return uri.getHost();
-        }
-        catch( Throwable t ) {
-            throw new RuntimeException(t);
-        }
-
-    }
-
-    private @Nonnull Collection<Region> listRegionsFromEndpoints() throws InternalException, CloudException {
-        ArrayList<Region> regions = new ArrayList<Region>();
-        String endpoint = getContext().getEndpoint();
-
-        if( endpoint != null ) {
-            regions.add(toRegion(getRegionId(endpoint)));
         }
         return regions;
     }
@@ -459,20 +431,6 @@ public class Dc implements DataCenterServices {
         return dc;
     }
 
-    private @Nullable DataCenter toDataCenter(@Nullable Datacenter dc, @Nonnull String regionId) {
-        if( dc != null ) {
-            DataCenter dsDc = new DataCenter();
-            
-            dsDc.setActive(true);
-            dsDc.setAvailable(true);
-            dsDc.setName(dc.getName());
-            dsDc.setProviderDataCenterId(dc.getName());
-            dsDc.setRegionId(regionId);
-            return dsDc;
-        }
-        return null;
-    }
-
     private @Nullable Region toRegion(@Nullable Datacenter dc) {
         if(dc == null ) {
             return null;
@@ -487,21 +445,9 @@ public class Dc implements DataCenterServices {
         return region;
     }
 
-    private @Nonnull Region toRegion(@Nonnull String regionId) {
-        Region region = new Region();
-        
-        region.setActive(true);
-        region.setAvailable(true);
-        region.setJurisdiction("US");
-        region.setName(regionId);
-        region.setProviderRegionId(regionId);
-        return region;        
-    }
-
     private org.dasein.cloud.dc.ResourcePool toResourcePool(@Nonnull ResourcePool resourcePool, @Nonnull String dataCenterId) {
         org.dasein.cloud.dc.ResourcePool rp = new org.dasein.cloud.dc.ResourcePool();
         rp.setName(resourcePool.getName());
-        rp.setProvideResourcePoolId(resourcePool.getName());
         rp.setDataCenterId(dataCenterId);
 
         ManagedEntityStatus status = resourcePool.getRuntime().getOverallStatus();
@@ -512,6 +458,33 @@ public class Dc implements DataCenterServices {
             rp.setAvailable(true);
         }
 
+        //get resource pool hierarchy and add to id
+        rp.setProvideResourcePoolId(getIdForResourcePool(resourcePool));
+
         return rp;
+    }
+
+    public String getIdForResourcePool(ResourcePool rp) {
+        String id = rp.getName();
+        while (true) {
+            ManagedEntity parent = rp.getParent();
+            if (parent instanceof ResourcePool) {
+                id = parent.getName()+"."+id;
+                rp = (ResourcePool)parent;
+            }
+            else {
+                //need to remove the top root resource pool
+                int rPIdx = id.indexOf(".")+1;
+                if (rPIdx > 0) {
+                    id = id.substring(rPIdx);
+                }
+                else {
+                    //we only have the root resource pool so return null
+                    return null;
+                }
+                break;
+            }
+        }
+        return id;
     }
 }

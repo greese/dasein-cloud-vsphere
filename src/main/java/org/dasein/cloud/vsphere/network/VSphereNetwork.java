@@ -128,14 +128,14 @@ public class VSphereNetwork extends AbstractVLANSupport{
             ArrayList<VLAN> networkList=new ArrayList<VLAN>();
             Datacenter dc;
             Network[] nets;
-            if (provider.isClusterBased()) {
-                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, getContext().getRegionId());
-                DataCenter ourDC = provider.getDataCenterServices().listDataCenters(getContext().getRegionId()).iterator().next();
+            String rid = getContext().getRegionId();
+            if( rid != null ) {
+                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, rid);
 
                 try {
                     nets = dc.getNetworks();
                     for(int d=0; d<nets.length; d++) {
-                        networkList.add(toVlan(nets[d], ourDC.getName()));
+                        networkList.add(toVlan(nets[d]));
                     }
                 }
                 catch( InvalidProperty e ) {
@@ -148,34 +148,6 @@ public class VSphereNetwork extends AbstractVLANSupport{
                     throw new CloudException("Error in cluster processing request: " + e.getMessage());
                 }
             }
-            else {
-                String rid = getContext().getRegionId();
-                String dataCenterId = null;
-                if( rid != null ) {
-                    for( DataCenter dsdc : provider.getDataCenterServices().listDataCenters(rid) ) {
-                        dataCenterId = dsdc.getProviderDataCenterId();
-                        dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
-
-                        DataCenter ourDC = provider.getDataCenterServices().listDataCenters(getContext().getRegionId()).iterator().next();
-
-                        try {
-                            nets = dc.getNetworks();
-                            for(int d=0; d<nets.length; d++) {
-                                networkList.add(toVlan(nets[d], ourDC.getName()));
-                            }
-                        }
-                        catch( InvalidProperty e ) {
-                            throw new CloudException("No network support in cluster: " + e.getMessage());
-                        }
-                        catch( RuntimeFault e ) {
-                            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
-                        }
-                        catch( RemoteException e ) {
-                            throw new CloudException("Error in cluster processing request: " + e.getMessage());
-                        }
-                    }
-                }
-            }
             return networkList;
         }
         finally {
@@ -183,16 +155,14 @@ public class VSphereNetwork extends AbstractVLANSupport{
         }
     }
 
-    private VLAN toVlan(Network network, String dcName) throws InternalException, CloudException {
+    private VLAN toVlan(Network network) throws InternalException, CloudException {
         if (network != null) {
             VLAN vlan = new VLAN();
             vlan.setName(network.getName());
             vlan.setDescription(vlan.getName());
-            // assumption that networks are per datacenter so this should be unique
-            vlan.setProviderVlanId(vlan.getName()+"_"+dcName);
+            vlan.setProviderVlanId(vlan.getName());
             vlan.setCidr("");
             vlan.setProviderRegionId(getContext().getRegionId());
-            vlan.setProviderDataCenterId(dcName);
             vlan.setProviderOwnerId(getContext().getAccountNumber());
             vlan.setSupportedTraffic(IPVersion.IPV4);
             vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);

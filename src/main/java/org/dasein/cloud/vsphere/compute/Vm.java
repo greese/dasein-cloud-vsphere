@@ -1157,10 +1157,12 @@ public class Vm extends AbstractVMSupport {
 
                 GuestNicInfo[] nicInfoArray = guestInfo.getNet();
                 if (nicInfoArray != null && nicInfoArray.length>0) {
-                    GuestNicInfo nicInfo = nicInfoArray[0];
-                    String net = nicInfo.getNetwork();
-                    if (net != null) {
-                        server.setProviderVlanId(net+"_"+dc);
+                    for (GuestNicInfo nicInfo : nicInfoArray) {
+                        String net = nicInfo.getNetwork();
+                        if (net != null) {
+                            server.setProviderVlanId(net);
+                            break;
+                        }
                     }
                 }
             }

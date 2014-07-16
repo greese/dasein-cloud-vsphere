@@ -57,7 +57,6 @@ import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedEntityStatus;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInProgress;
-import com.vmware.vim25.VAppIPAssignmentInfo;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
 import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
 import com.vmware.vim25.VirtualDeviceConnectInfo;
@@ -118,12 +117,13 @@ public class Vm extends AbstractVMSupport {
 
         if( vm != null ) {
             try {
+                String datacenter = vm.getResourcePool().getOwner().getName();
                 Datacenter dc = getVmwareDatacenter(vm);
 
                 if( dc == null ) {
                     throw new CloudException("Could not identify a deployment data center.");
                 }
-                vm.powerOnVM_Task(getBestHost(dc));
+                vm.powerOnVM_Task(getBestHost(dc, datacenter));
             }
             catch( TaskInProgress e ) {
                 throw new CloudException(e);
@@ -178,7 +178,7 @@ public class Vm extends AbstractVMSupport {
             VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
             VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
 
-            location.setHost(getBestHost(dc).getConfig().getHost());
+            location.setHost(getBestHost(dc, dcId).getConfig().getHost());
             location.setPool(pool.getConfig().getEntity());
             spec.setLocation(location);
             spec.setPowerOn(false);
@@ -524,21 +524,23 @@ public class Vm extends AbstractVMSupport {
         }
     }
     
-    @Nonnull HostSystem getBestHost(@Nonnull Datacenter forDatacenter) throws CloudException, RemoteException {
-        Collection<HostSystem> possibles = getPossibleHosts(forDatacenter);
+    @Nonnull HostSystem getBestHost(@Nonnull Datacenter forDatacenter, @Nonnull String clusterName) throws CloudException, RemoteException {
+        Collection<HostSystem> possibles = getPossibleHosts(forDatacenter, clusterName);
 
         if( possibles.isEmpty()) {
             HostSystem ohWell = null;
 
             for( ManagedEntity me : forDatacenter.getHostFolder().getChildEntity() ) {
-                ComputeResource cluster = (ComputeResource)me;
+                if (me.getName().equals(clusterName)){
+                    ComputeResource cluster = (ComputeResource)me;
 
-                for( HostSystem host : cluster.getHosts() ) {
-                    if( host.getConfigStatus().equals(ManagedEntityStatus.green) ) {
-                        return host;
-                    }
-                    if( ohWell == null || host.getConfigStatus().equals(ManagedEntityStatus.yellow) ) {
-                        ohWell = host;
+                    for( HostSystem host : cluster.getHosts() ) {
+                        if( host.getConfigStatus().equals(ManagedEntityStatus.green) ) {
+                            return host;
+                        }
+                        if( ohWell == null || host.getConfigStatus().equals(ManagedEntityStatus.yellow) ) {
+                            ohWell = host;
+                        }
                     }
                 }
             }
@@ -547,18 +549,21 @@ public class Vm extends AbstractVMSupport {
             }
             return ohWell;
         }
+
         return possibles.iterator().next();
     }
 
-    @Nonnull Collection<HostSystem> getPossibleHosts(@Nonnull Datacenter dc) throws CloudException, RemoteException {
+    @Nonnull Collection<HostSystem> getPossibleHosts(@Nonnull Datacenter dc, @Nonnull String clusterName) throws CloudException, RemoteException {
         ArrayList<HostSystem> possibles = new ArrayList<HostSystem>();
 
         for( ManagedEntity me : dc.getHostFolder().getChildEntity() ) {
-            ComputeResource cluster = (ComputeResource)me;
+            if (me.getName().equals(clusterName)){
+                ComputeResource cluster = (ComputeResource)me;
 
-            for( HostSystem host : cluster.getHosts() ) {
-                if( host.getConfigStatus().equals(ManagedEntityStatus.green) ) {
-                    possibles.add(host);
+                for( HostSystem host : cluster.getHosts() ) {
+                    if( host.getConfigStatus().equals(ManagedEntityStatus.green) ) {
+                        possibles.add(host);
+                    }
                 }
             }
         }
@@ -1230,10 +1235,12 @@ public class Vm extends AbstractVMSupport {
 
                 GuestNicInfo[] nicInfoArray = guestInfo.getNet();
                 if (nicInfoArray != null && nicInfoArray.length>0) {
-                    GuestNicInfo nicInfo = nicInfoArray[0];
-                    String net = nicInfo.getNetwork();
-                    if (net != null) {
-                        server.setProviderVlanId(net);
+                    for (GuestNicInfo nicInfo : nicInfoArray) {
+                        String net = nicInfo.getNetwork();
+                        if (net != null) {
+                            server.setProviderVlanId(net);
+                            break;
+                        }
                     }
                 }
 

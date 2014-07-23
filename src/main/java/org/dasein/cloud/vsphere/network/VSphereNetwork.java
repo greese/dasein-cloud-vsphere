@@ -1,6 +1,7 @@
 package org.dasein.cloud.vsphere.network;
 
 import com.vmware.vim25.InvalidProperty;
+import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.NetworkSummary;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.mo.*;
@@ -135,7 +136,9 @@ public class VSphereNetwork extends AbstractVLANSupport{
                 try {
                     nets = dc.getNetworks();
                     for(int d=0; d<nets.length; d++) {
-                        networkList.add(toVlan(nets[d]));
+                        if (nets[d].getMOR().getType().equals("Network")) {
+                            networkList.add(toVlan(nets[d]));
+                        }
                     }
                 }
                 catch( InvalidProperty e ) {
@@ -159,7 +162,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
         if (network != null) {
             VLAN vlan = new VLAN();
             vlan.setName(network.getName());
-            vlan.setDescription(vlan.getName());
+            vlan.setDescription(vlan.getName()+"("+network.getMOR().getVal()+")");
             vlan.setProviderVlanId(vlan.getName());
             vlan.setCidr("");
             vlan.setProviderRegionId(getContext().getRegionId());

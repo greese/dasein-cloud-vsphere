@@ -18,7 +18,6 @@
 
 package org.dasein.cloud.vsphere;
 
-import java.net.URI;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,6 +42,10 @@ import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ServiceInstance;
+import org.dasein.cloud.util.Cache;
+import org.dasein.cloud.util.CacheLevel;
+import org.dasein.util.uom.time.Minute;
+import org.dasein.util.uom.time.TimePeriod;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -177,20 +180,29 @@ public class Dc implements DataCenterServices {
 
     @Override
     public @Nonnull Collection<DataCenter> listDataCenters(@Nonnull String regionId) throws InternalException, CloudException {
-        Collection<DataCenter> clusters = listDataCentersFromClusters(regionId);
-        if (clusters != null && clusters.size() > 0) {
-            return clusters;
+        Cache<DataCenter> cache = Cache.getInstance(provider, "dataCenters", DataCenter.class, CacheLevel.REGION_ACCOUNT, new TimePeriod<Minute>(15, TimePeriod.MINUTE));
+        Collection<DataCenter> dcs = (Collection<DataCenter>)cache.get(provider.getContext());
+
+        if( dcs == null ) {
+            dcs = listDataCentersFromClusters(regionId);
+            if (dcs != null && dcs.size() > 0) {
+                cache.put(provider.getContext(), dcs);
+                return dcs;
+            }
+            else {
+                // create a dummy dc based on the region (vSphere datacenter)
+                DataCenter dc = new DataCenter();
+                dc.setAvailable(true);
+                dc.setActive(true);
+                dc.setName(regionId);
+                dc.setRegionId(regionId);
+                dc.setProviderDataCenterId(regionId+"-a");
+                dcs.add(dc);
+                cache.put(provider.getContext(), dcs);
+                return Collections.singletonList(dc);
+            }
         }
-        else {
-            // create a dummy dc based on the region (vSphere datacenter)
-            DataCenter dc = new DataCenter();
-            dc.setAvailable(true);
-            dc.setActive(true);
-            dc.setName(regionId);
-            dc.setRegionId(regionId);
-            dc.setProviderDataCenterId(regionId+"-a");
-            return Collections.singletonList(dc);
-        }
+        return dcs;
     }
 
     private @Nonnull Collection<DataCenter> listDataCentersFromClusters(@Nonnull String regionId) throws InternalException, CloudException {
@@ -236,7 +248,7 @@ public class Dc implements DataCenterServices {
     @Override
     public Collection<org.dasein.cloud.dc.ResourcePool> listResourcePools(String providerDataCenterId) throws InternalException, CloudException {
         ArrayList<org.dasein.cloud.dc.ResourcePool> list = new ArrayList<org.dasein.cloud.dc.ResourcePool>();
-        Iterable<ResourcePool> rps= null;
+        Iterable<ResourcePool> rps;
         DataCenter ourDC = provider.getDataCenterServices().getDataCenter(providerDataCenterId);
         if (ourDC.getProviderDataCenterId().endsWith("-a")) {
             rps = listResourcePoolsForDatacenter(ourDC.getRegionId());
@@ -466,11 +478,11 @@ public class Dc implements DataCenterServices {
 
     public String getIdForResourcePool(ResourcePool rp) {
         String id = rp.getName();
-        while (true) {
-            ManagedEntity parent = rp.getParent();
+        ManagedEntity parent = rp.getParent();
+        while (parent != null) {
             if (parent instanceof ResourcePool) {
                 id = parent.getName()+"."+id;
-                rp = (ResourcePool)parent;
+                parent = parent.getParent();
             }
             else {
                 //need to remove the top root resource pool

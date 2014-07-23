@@ -22,7 +22,6 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 
 import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
@@ -40,6 +39,7 @@ import org.dasein.cloud.compute.MachineImageState;
 import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import com.vmware.vim25.InvalidProperty;
@@ -78,61 +78,51 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public void remove(@Nonnull String providerImageId, boolean checkState) throws CloudException, InternalException {
-        ServiceInstance instance = getServiceInstance();
-
-        Folder folder = provider.getVmFolder(instance);
-        ManagedEntity[] mes;
-
+        APITrace.begin(provider, "Image.remove");
         try {
-            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
-        }
-        catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
-        }
-        catch( RuntimeFault e ) {
-            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
-        }
-        catch( RemoteException e ) {
-            throw new CloudException("Error in cluster processing request: " + e.getMessage());
-        }
+            ServiceInstance instance = getServiceInstance();
 
-        if( mes != null && mes.length > 0 ) {
-            for( ManagedEntity entity : mes ) {
-                VirtualMachine template = (VirtualMachine)entity;
-                if( template != null && template.getConfig().getUuid().equals(providerImageId)) {
-                    VirtualMachineConfigInfo cfg = null;
+            Folder folder = provider.getVmFolder(instance);
+            ManagedEntity[] mes;
 
-                    try {
-                        cfg = template.getConfig();
-                        if( cfg != null && cfg.isTemplate() ) {
-                            template.destroy_Task();
+            try {
+                mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+            }
+            catch( RuntimeFault e ) {
+                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in cluster processing request: " + e.getMessage());
+            }
+
+            if( mes != null && mes.length > 0 ) {
+                for( ManagedEntity entity : mes ) {
+                    VirtualMachine template = (VirtualMachine)entity;
+                    if( template != null && template.getConfig().getUuid().equals(providerImageId)) {
+                        VirtualMachineConfigInfo cfg = null;
+
+                        try {
+                            cfg = template.getConfig();
+                            if( cfg != null && cfg.isTemplate() ) {
+                                template.destroy_Task();
+                            }
                         }
-                    }
-                    catch(RuntimeException e) {
-                        e.printStackTrace();
-                    }
-                    catch(RemoteException ex){
-                        throw new CloudException(ex);
+                        catch(RuntimeException e) {
+                            e.printStackTrace();
+                        }
+                        catch(RemoteException ex){
+                            throw new CloudException(ex);
+                        }
                     }
                 }
             }
         }
-
-        /*
-        ServiceInstance service = getServiceInstance();
-
-        com.vmware.vim25.mo.VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(service, providerImageId);
-
-        if( vm == null ) {
-            throw new CloudException("No such template: " + providerImageId);
+        finally {
+            APITrace.end();
         }
-        try {
-            vm.destroy_Task();
-        }
-        catch( RemoteException e ) {
-            throw new CloudException(e);
-        }
-        */
     }
 
     private transient volatile TemplateCapabilities capabilities;
@@ -146,19 +136,20 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public MachineImage getImage(@Nonnull String providerImageId) throws CloudException, InternalException {
-        for( ImageClass cls : getCapabilities().listSupportedImageClasses() ) {
-            for( MachineImage image : listImages(ImageFilterOptions.getInstance(cls)) ) {
-                if( image.getProviderMachineImageId().equals(providerImageId) ) {
-                    return image;
+        APITrace.begin(provider, "Image.getImage");
+        try {
+            for( ImageClass cls : getCapabilities().listSupportedImageClasses() ) {
+                for( MachineImage image : listImages(ImageFilterOptions.getInstance(cls)) ) {
+                    if( image.getProviderMachineImageId().equals(providerImageId) ) {
+                        return image;
+                    }
                 }
             }
+            return null;
         }
-        return null;
-    }
-
-    @Override
-    public @Nonnull String getProviderTermForImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
-        return "template";
+        finally {
+            APITrace.end();
+        }
     }
 
     @Override
@@ -223,33 +214,34 @@ public class Template extends AbstractImageSupport {
     }
 
     @Override
-    public boolean hasPublicLibrary() {
-        return false;
-    }
-
-    @Override
     protected MachineImage capture(@Nonnull ImageCreateOptions options, @Nullable AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
-        String vmId = options.getVirtualMachineId();
+        APITrace.begin(provider, "Image.capture");
+        try {
+            String vmId = options.getVirtualMachineId();
 
-        if( vmId == null ) {
-            throw new CloudException("You must specify a virtual machine to capture");
-        }
-        ServiceInstance service = getServiceInstance();
+            if( vmId == null ) {
+                throw new CloudException("You must specify a virtual machine to capture");
+            }
+            ServiceInstance service = getServiceInstance();
 
-        com.vmware.vim25.mo.VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(service, vmId);
+            com.vmware.vim25.mo.VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(service, vmId);
 
-        if( vm == null ) {
-            throw new CloudException("No such virtual machine for imaging: " + vmId);
-        }
-        MachineImage img = toMachineImage(provider.getComputeServices().getVirtualMachineSupport().clone(service, vm, options.getName(), true));
+            if( vm == null ) {
+                throw new CloudException("No such virtual machine for imaging: " + vmId);
+            }
+            MachineImage img = toMachineImage(provider.getComputeServices().getVirtualMachineSupport().clone(service, vm, options.getName(), true));
 
-        if( img == null ) {
-            throw new CloudException("Failed to identify newly created template");
+            if( img == null ) {
+                throw new CloudException("Failed to identify newly created template");
+            }
+            if( task != null ) {
+                task.completeWithResult(img);
+            }
+            return img;
         }
-        if( task != null ) {
-            task.completeWithResult(img);
+        finally {
+            APITrace.end();
         }
-        return img;
     }
 
     @Override
@@ -264,60 +256,72 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<ResourceStatus> listImageStatus(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        ArrayList<ResourceStatus> status = new ArrayList<ResourceStatus>();
+        APITrace.begin(provider, "Image.listImageStatus");
+        try {
+            ArrayList<ResourceStatus> status = new ArrayList<ResourceStatus>();
 
-        for( MachineImage img : listImages(cls) ) {
-            status.add(new ResourceStatus(img.getProviderMachineImageId(), img.getCurrentState()));
+            for( MachineImage img : listImages(cls) ) {
+                status.add(new ResourceStatus(img.getProviderMachineImageId(), img.getCurrentState()));
+            }
+            return status;
         }
-        return status;
+        finally {
+            APITrace.end();
+        }
     }
 
     @Override
     public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
-        ArrayList<MachineImage> machineImages = new ArrayList<MachineImage>();
-        ServiceInstance instance = getServiceInstance();
-
-        Folder folder = provider.getVmFolder(instance);
-        ManagedEntity[] mes;
-
+        APITrace.begin(provider, "Image.listImages");
         try {
-            mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
-        }
-        catch( InvalidProperty e ) {
-            throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
-        }
-        catch( RuntimeFault e ) {
-            throw new CloudException("Error in processing request to cluster: " + e.getMessage());
-        }
-        catch( RemoteException e ) {
-            throw new CloudException("Error in cluster processing request: " + e.getMessage());
-        }
+            ArrayList<MachineImage> machineImages = new ArrayList<MachineImage>();
+            ServiceInstance instance = getServiceInstance();
 
-        if( mes != null && mes.length > 0 ) {
-            for( ManagedEntity entity : mes ) {
-                VirtualMachine template = (VirtualMachine)entity;
+            Folder folder = provider.getVmFolder(instance);
+            ManagedEntity[] mes;
 
-                if( template != null ) {
-                    VirtualMachineConfigInfo cfg = null;
+            try {
+                mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+            }
+            catch( RuntimeFault e ) {
+                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in cluster processing request: " + e.getMessage());
+            }
 
-                    try {
-                        cfg = template.getConfig();
-                    }
-                    catch( RuntimeException e ) {
-                        e.printStackTrace();
-                    }
-                    if( cfg != null && cfg.isTemplate() ) {
-                        MachineImage image = toMachineImage(template);
+            if( mes != null && mes.length > 0 ) {
+                for( ManagedEntity entity : mes ) {
+                    VirtualMachine template = (VirtualMachine)entity;
 
-                        if( image != null && (options == null || options.matches(image)) ) {
-                            machineImages.add(image);
+                    if( template != null ) {
+                        VirtualMachineConfigInfo cfg = null;
+
+                        try {
+                            cfg = template.getConfig();
+                        }
+                        catch( RuntimeException e ) {
+                            e.printStackTrace();
+                        }
+                        if( cfg != null && cfg.isTemplate() ) {
+                            MachineImage image = toMachineImage(template);
+
+                            if( image != null && (options == null || options.matches(image)) ) {
+                                machineImages.add(image);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        return machineImages;
+            return machineImages;
+        }
+        finally {
+            APITrace.end();
+        }
     }
 
     @Override
@@ -328,10 +332,5 @@ public class Template extends AbstractImageSupport {
     @Override
     public @Nonnull Iterable<MachineImage> searchPublicImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture, @Nullable ImageClass... imageClasses) throws CloudException, InternalException {
         return Collections.emptyList();
-    }
-
-    @Override
-    public boolean supportsCustomImages() {
-        return true;
     }
 }

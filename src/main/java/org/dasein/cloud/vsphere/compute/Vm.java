@@ -34,7 +34,6 @@ import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.compute.AbstractVMSupport;
 import org.dasein.cloud.compute.Architecture;
-import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.compute.VirtualMachineCapabilities;
 import org.dasein.cloud.compute.VirtualMachine;
@@ -45,6 +44,7 @@ import org.dasein.cloud.compute.VmState;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
+import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.util.Cache;
 import org.dasein.cloud.util.CacheLevel;
 import org.dasein.cloud.vsphere.PrivateCloud;
@@ -77,6 +77,7 @@ import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
+import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.mo.ResourcePool;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
@@ -123,7 +124,13 @@ public class Vm extends AbstractVMSupport {
                 if( dc == null ) {
                     throw new CloudException("Could not identify a deployment data center.");
                 }
-                vm.powerOnVM_Task(getBestHost(dc, datacenter));
+                HostSystem host = getHost(vm);
+                if (host == null)  {
+                    vm.powerOnVM_Task(getBestHost(dc, datacenter));
+                }
+                else {
+                    vm.powerOnVM_Task(host);
+                }
             }
             catch( TaskInProgress e ) {
                 throw new CloudException(e);
@@ -178,7 +185,13 @@ public class Vm extends AbstractVMSupport {
             VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
             VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
 
-            location.setHost(getBestHost(dc, dcId).getConfig().getHost());
+            HostSystem host = getHost(vm);
+            if (host == null)  {
+                location.setHost(getBestHost(dc, dcId).getConfig().getHost());
+            }
+            else {
+                location.setHost(host.getConfig().getHost());
+            }
             location.setPool(pool.getConfig().getEntity());
             spec.setLocation(location);
             spec.setPowerOn(false);
@@ -465,7 +478,10 @@ public class Vm extends AbstractVMSupport {
 
                 VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
-
+                if (options.getAffinityGroupId() != null) {
+                    Host agSupport= provider.getComputeServices().getAffinityGroupSupport();
+                    location.setHost(agSupport.getHostSystemForAffinity(options.getAffinityGroupId()).getConfig().getHost());
+                }
                 location.setPool(pool.getConfig().getEntity());
                 spec.setLocation(location);
                 spec.setPowerOn(false);
@@ -590,15 +606,23 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nullable HostSystem getHost(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
-        ManagedEntity parent = vm.getParent();
+        APITrace.begin(provider, "getHostForVM");
+        try {
+            String dc = getDataCenter(vm);
+            ManagedObjectReference vmHost = vm.getRuntime().getHost();
 
-        while( parent != null ) {
-            if( parent instanceof HostSystem ) {
-                return ((HostSystem)parent);
+            Host affinityGroupSupport = provider.getComputeServices().getAffinityGroupSupport();
+            Iterable<HostSystem> hostSystems = affinityGroupSupport.listHostSystems(dc);
+            for (HostSystem host : hostSystems) {
+                if (vmHost.getVal().equals(host.getMOR().getVal())) {
+                    return host;
+                }
             }
-            parent = parent.getParent();
+            return null;
         }
-        return null;
+        finally {
+            APITrace.end();
+        }
     }
     
     private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance service, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
@@ -1154,6 +1178,12 @@ public class Vm extends AbstractVMSupport {
 
             VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(vminfo.getGuestId());
             VirtualMachine server = new VirtualMachine();
+
+            HostSystem host = getHost(vm);
+            if (host != null) {
+                server.setAffinityGroupId(host.getName());
+            }
+
             GuestInfo guest = vm.getGuest();
             String addr = guest.getIpAddress();
 
@@ -1180,16 +1210,11 @@ public class Vm extends AbstractVMSupport {
             server.setDescription(description);
             server.setProductId(getProduct(vminfo.getHardware()).getProviderProductId());
             String imageId = vminfo.getAnnotation();
-            MachineImage img = null;
             
-
-            if( imageId != null ) {
-                img = provider.getComputeServices().getImageSupport().getImage(imageId);
+            if (imageId != null && imageId.length()>0 && !imageId.contains(" ")) {
+                server.setProviderMachineImageId(imageId);
             }
-            if( img != null ) {
-                server.setProviderMachineImageId(vminfo.getAnnotation());
-            }
-            else {  
+            else {
                 server.setProviderMachineImageId(getContext().getAccountNumber() + "-unknown");
             }
             server.setProviderRegionId(getContext().getRegionId());

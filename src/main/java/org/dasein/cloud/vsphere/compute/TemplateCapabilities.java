@@ -55,7 +55,7 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     @Nonnull
     @Override
     public String getProviderTermForImage(@Nonnull Locale locale, @Nonnull ImageClass cls) {
-        return "template";  //To change body of implemented methods use File | Settings | File Templates.
+        return "template";
     }
 
     @Nonnull

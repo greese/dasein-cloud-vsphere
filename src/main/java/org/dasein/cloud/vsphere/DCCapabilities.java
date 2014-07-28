@@ -26,6 +26,11 @@ public class DCCapabilities extends AbstractCapabilities<PrivateCloud> implement
     }
 
     @Override
+    public boolean supportsAffinityGroups() {
+        return true;
+    }
+
+    @Override
     public boolean supportsResourcePools() {
         return true;
     }

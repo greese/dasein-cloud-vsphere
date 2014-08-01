@@ -205,6 +205,21 @@ public class Host extends AbstractAffinityGroupSupport {
         }
     }
 
+    public Collection<Datastore> listDatastoresForHost(HostSystem host) throws CloudException, InternalException {
+        ArrayList<Datastore> list = new ArrayList<Datastore>();
+        try {
+            Datastore[] datastores = host.getDatastores();
+            for (Datastore datastore : datastores) {
+                list.add(datastore);
+            }
+        }
+        catch (RemoteException e) {
+            throw new CloudException(e);
+        }
+        return list;
+    }
+
+
     private @Nonnull ServiceInstance getServiceInstance() throws CloudException, InternalException {
         ServiceInstance instance = provider.getServiceInstance();
 

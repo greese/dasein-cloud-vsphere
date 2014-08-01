@@ -23,15 +23,17 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
-import org.apache.log4j.Logger;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
 import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.ResourceStatus;
+import org.apache.log4j.Logger;
 import org.dasein.cloud.compute.AbstractVMSupport;
 import org.dasein.cloud.compute.Architecture;
 import org.dasein.cloud.compute.Platform;
@@ -66,6 +68,7 @@ import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigInfo;
+import com.vmware.vim25.VirtualMachineConfigInfoDatastoreUrlPair;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
 import com.vmware.vim25.VirtualMachinePowerState;
@@ -73,6 +76,7 @@ import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineRuntimeInfo;
 import com.vmware.vim25.mo.ComputeResource;
 import com.vmware.vim25.mo.Datacenter;
+import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
@@ -502,6 +506,18 @@ public class Vm extends AbstractVMSupport {
                         Host agSupport= provider.getComputeServices().getAffinityGroupSupport();
                         location.setHost(agSupport.getHostSystemForAffinity(options.getAffinityGroupId()).getConfig().getHost());
                     }
+                    if (options.getStoragePoolId() != null) {
+                        String locationId = options.getStoragePoolId();
+
+                        Datastore[] datastores = vdc.getDatastores();
+                        for (Datastore ds : datastores) {
+                            if (ds.getName().equals(locationId)) {
+                                location.setDatastore(ds.getMOR());
+                                break;
+                            }
+                        }
+                    }
+
                     location.setPool(pool.getConfig().getEntity());
                     spec.setLocation(location);
                     spec.setPowerOn(false);
@@ -1302,6 +1318,11 @@ public class Vm extends AbstractVMSupport {
             if( vminfo == null || vminfo.isTemplate() ) {
                 return null;
             }
+            Map<String, String> properties = new HashMap<String, String>();
+            VirtualMachineConfigInfoDatastoreUrlPair[] datastoreUrl = vminfo.getDatastoreUrl();
+            for (int i=0;i<datastoreUrl.length; i++) {
+                properties.put("datastore"+i,datastoreUrl[i].getName());
+            }
 
             VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(vminfo.getGuestId());
             VirtualMachine server = new VirtualMachine();
@@ -1435,6 +1456,7 @@ public class Vm extends AbstractVMSupport {
                 }
             }
             server.setProviderOwnerId(getContext().getAccountNumber());
+            server.setTags(properties);
             return server;
         }
         return null;

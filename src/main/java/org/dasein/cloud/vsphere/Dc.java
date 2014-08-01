@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Locale;
 
-import com.vmware.vim25.ManagedEntityStatus;
+import com.vmware.vim25.*;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.ResourcePool;
 import org.dasein.cloud.CloudErrorType;
@@ -34,17 +34,21 @@ import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.dc.DataCenterCapabilities;
 import org.dasein.cloud.dc.DataCenterServices;
 import org.dasein.cloud.dc.Region;
+import org.dasein.cloud.dc.StoragePool;
 
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.mo.Datacenter;
+import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
+import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ServiceInstance;
 import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.util.Cache;
 import org.dasein.cloud.util.CacheLevel;
+import org.dasein.cloud.vsphere.compute.Host;
+import org.dasein.util.uom.storage.Megabyte;
+import org.dasein.util.uom.storage.Storage;
 import org.dasein.util.uom.time.Minute;
 import org.dasein.util.uom.time.TimePeriod;
 
@@ -436,6 +440,47 @@ public class Dc implements DataCenterServices {
         }
     }
 
+    @Override
+    public Collection<StoragePool> listStoragePools() throws InternalException, CloudException {
+        APITrace.begin(provider, "DC.listStoragePools");
+        try {
+            Cache<StoragePool> cache = Cache.getInstance(provider, "storagePools", StoragePool.class, CacheLevel.REGION_ACCOUNT, new TimePeriod<Minute>(15, TimePeriod.MINUTE));
+            Collection<StoragePool> pools = (Collection<StoragePool>)cache.get(provider.getContext());
+
+            if( pools == null ) {
+                pools = new ArrayList<StoragePool>();
+                ArrayList<String> datastoreNames = new ArrayList<String>();
+                Host hostSupport = provider.getComputeServices().getAffinityGroupSupport();
+
+                for (DataCenter dataCenter : listDataCenters(provider.getContext().getRegionId())) {
+                    for (HostSystem host : hostSupport.listHostSystems(dataCenter.getProviderDataCenterId())) {
+                        Iterable<Datastore> datastores = hostSupport.listDatastoresForHost(host);
+                        for (Datastore ds: datastores) {
+                            if (!datastoreNames.contains(ds.getName())) {
+                                datastoreNames.add(ds.getName());
+                                StoragePool sp = toStoragePool(ds, host.getName(), dataCenter.getProviderDataCenterId());
+                                pools.add(sp);
+                            }
+                            else {
+                                for (StoragePool storagePool: pools) {
+                                    if (storagePool.getStoragePoolName().equals(ds.getName())) {
+                                        storagePool.setAffinityGroupId(null);
+                                        storagePool.setDataCenterId(null);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                cache.put(provider.getContext(), pools);
+            }
+            return pools;
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
     public ResourcePool getVMWareResourcePool(String providerResourcePoolId) throws InternalException, CloudException {
         APITrace.begin(provider, "DC.getVMWareResourcePool");
         try {
@@ -571,5 +616,23 @@ public class Dc implements DataCenterServices {
             }
         }
         return id;
+    }
+
+    private StoragePool toStoragePool(Datastore ds, String hostName, String datacenter) {
+        StoragePool sp = new StoragePool();
+        sp.setAffinityGroupId(hostName);
+        sp.setDataCenterId(datacenter);
+        sp.setRegionId(provider.getContext().getRegionId());
+        sp.setStoragePoolName(ds.getName());
+        sp.setStoragePoolId(ds.getName());
+
+        DatastoreSummary info = ds.getSummary();
+        long capacityBytes = info.getCapacity();
+        long freeBytes = info.getFreeSpace();
+        long provisioned = capacityBytes-freeBytes;
+        sp.setCapacity((Storage<Megabyte>)new Storage<org.dasein.util.uom.storage.Byte>(capacityBytes, Storage.BYTE).convertTo(Storage.MEGABYTE));
+        sp.setFreeSpace((Storage<Megabyte>)new Storage<org.dasein.util.uom.storage.Byte>(freeBytes, Storage.BYTE).convertTo(Storage.MEGABYTE));
+        sp.setProvisioned((Storage<Megabyte>)new Storage<org.dasein.util.uom.storage.Byte>(provisioned, Storage.BYTE).convertTo(Storage.MEGABYTE));
+        return sp;
     }
 }

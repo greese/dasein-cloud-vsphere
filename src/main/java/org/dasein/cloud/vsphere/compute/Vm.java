@@ -34,15 +34,7 @@ import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.ResourceStatus;
 import org.apache.log4j.Logger;
-import org.dasein.cloud.compute.AbstractVMSupport;
-import org.dasein.cloud.compute.Architecture;
-import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.compute.VirtualMachineCapabilities;
-import org.dasein.cloud.compute.VirtualMachine;
-import org.dasein.cloud.compute.VirtualMachineProduct;
-import org.dasein.cloud.compute.VMLaunchOptions;
-import org.dasein.cloud.compute.VMScalingOptions;
-import org.dasein.cloud.compute.VmState;
+import org.dasein.cloud.compute.*;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
@@ -854,6 +846,38 @@ public class Vm extends AbstractVMSupport {
         finally {
             APITrace.end();
         }
+    }
+
+    @Override
+    public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options) throws InternalException, CloudException {
+        Iterable<VirtualMachineProduct> i64List = listProducts(Architecture.I64);
+        Iterable<VirtualMachineProduct> i32List = listProducts(Architecture.I32);
+        ArrayList<VirtualMachineProduct> combinedList = new ArrayList<VirtualMachineProduct>();
+
+        for (VirtualMachineProduct product : i64List) {
+            if (options.matches(product)) {
+                combinedList.add(product);
+            }
+        }
+        for (VirtualMachineProduct product : i32List) {
+            if (options.matches(product)) {
+                combinedList.add(product);
+            }
+        }
+        return combinedList;
+    }
+
+    @Override
+    public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options, Architecture architecture) throws InternalException, CloudException {
+        Iterable<VirtualMachineProduct> list = listProducts(architecture);
+        ArrayList<VirtualMachineProduct> combinedList = new ArrayList<VirtualMachineProduct>();
+
+        for (VirtualMachineProduct product : list) {
+            if (options.matches(product)) {
+                combinedList.add(product);
+            }
+        }
+        return combinedList;
     }
 
     static private Collection<Architecture> architectures;

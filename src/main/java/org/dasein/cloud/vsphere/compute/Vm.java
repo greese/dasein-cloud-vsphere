@@ -856,12 +856,6 @@ public class Vm extends AbstractVMSupport {
         }
     }
 
-    @Nonnull
-    @Override
-    public Iterable<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture, String preferedDataCenterId) throws InternalException, CloudException {
-        return listProducts(architecture);
-    }
-
     static private Collection<Architecture> architectures;
 
     @Override

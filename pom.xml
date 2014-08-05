@@ -22,7 +22,7 @@
 
   <groupId>org.dasein</groupId>
   <artifactId>dasein-cloud-vsphere</artifactId>
-  <version>2014.05.2</version>
+  <version>2014.08.2-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>dasein-cloud-vsphere</name>
@@ -63,7 +63,7 @@
     <dependency>
         <groupId>org.dasein</groupId>
         <artifactId>dasein-cloud-core</artifactId>
-        <version>2014.05.3</version>
+        <version>2014.08.1</version>
         <scope>compile</scope>
     </dependency>
     <dependency>
@@ -86,10 +86,10 @@
         <version>5.0.0</version>
         <scope>compile</scope>
         <optional>false</optional>
-    </dependency>   -->
+    </dependency>  -->
       <dependency>
-          <groupId>vijava</groupId>
-          <artifactId>vsphere-sdk</artifactId>
+          <groupId>com.vmware</groupId>
+          <artifactId>vijava</artifactId>
           <version>5.5-beta</version>
       </dependency>
       <dependency>
@@ -110,7 +110,7 @@
       <dependency>
           <groupId>org.dasein</groupId>
           <artifactId>dasein-cloud-test</artifactId>
-          <version>2014.05.1</version>
+          <version>2014.08.1</version>
           <scope>test</scope>
       </dependency>
       <dependency>
@@ -250,10 +250,10 @@
                     <value>${insecure}</value>
                 </property>
             </systemProperties>
-            <excludes>
-                <exclude>**/TestSuite.java</exclude>
-            </excludes>
-            <!--<argLine>-Ddasein.inclusions=StatefulVLANTests.launchVM,StatelessVMTests,StatefulVMTests.terminate</argLine>   -->
+          <excludes>
+            <exclude>**/TestSuite.java</exclude>
+          </excludes>
+           <!-- <argLine>-Ddasein.inclusions=StatelessDCTests</argLine>     -->
         </configuration>
       </plugin>  
       <plugin>

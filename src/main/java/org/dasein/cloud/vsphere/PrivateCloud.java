@@ -225,63 +225,7 @@ public class PrivateCloud extends AbstractCloud {
     }
 
     public @Nullable Folder getVmFolder(ServiceInstance instance) throws InternalException, CloudException {
-        if( isClusterBased() ) {
-            String regionId = getContext().getRegionId();
-
-            if( regionId == null ) {
-                throw new CloudException("No region has been defined for this request");
-            }
-            Datacenter dc = getDataCenterServices().getVmwareDatacenterFromVDCId(instance, regionId);
-
-            if( dc == null ) {
-                return null;
-            }
-            try {
-                return dc.getVmFolder();
-            }
-            catch( RemoteException e ) {
-                throw new CloudException("Error in cluster processing request: " + e.getMessage());
-            }
-        }
-        else {
-            return instance.getRootFolder();
-        }
-    }
-
-    public @Nullable Folder getNetworkFolder(ServiceInstance instance) throws InternalException, CloudException {
-        if( isClusterBased() ) {
-            String regionId = getContext().getRegionId();
-
-            if( regionId == null ) {
-                throw new CloudException("No region has been defined for this request");
-            }
-            Datacenter dc = getDataCenterServices().getVmwareDatacenterFromVDCId(instance, regionId);
-
-            if( dc == null ) {
-                return null;
-            }
-            return dc.getNetworkFolder();
-        }
-        else {
-            return instance.getRootFolder();
-        }
-    }
-
-    public boolean isClusterBased() throws CloudException {
-        ProviderContext ctx = getContext();
-
-        if( ctx == null ) {
-            throw new CloudException("No context was set for this request");
-        }
-        Properties p = ctx.getCustomProperties();
-        boolean cluster = true;
-
-        if( p != null ) {
-            String b = p.getProperty("clusterBased", "true");
-
-            cluster = b.equalsIgnoreCase("true");
-        }
-        return cluster;
+        return instance.getRootFolder();
     }
 
     /**

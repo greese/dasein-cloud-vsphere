@@ -37,4 +37,9 @@ public class VMwareComputeServices extends AbstractComputeServices {
     public @Nonnull Vm getVirtualMachineSupport() {
         return new Vm(cloud);
     }
+
+    @Override
+    public @Nonnull Host getAffinityGroupSupport() {
+        return new Host(cloud);
+    }
 }

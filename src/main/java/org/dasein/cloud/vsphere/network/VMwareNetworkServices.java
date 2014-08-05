@@ -19,6 +19,8 @@
 package org.dasein.cloud.vsphere.network;
 
 import org.dasein.cloud.network.AbstractNetworkServices;
+import org.dasein.cloud.network.VLAN;
+import org.dasein.cloud.network.VLANSupport;
 import org.dasein.cloud.vsphere.PrivateCloud;
 import org.dasein.cloud.network.VLAN;
 import org.dasein.cloud.network.VLANSupport;

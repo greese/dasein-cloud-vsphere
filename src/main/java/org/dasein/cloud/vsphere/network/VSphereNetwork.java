@@ -1,24 +1,7 @@
-/**
- * Copyright (C) 2010-2012 enStratus Networks Inc
- *
- * ====================================================================
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * ====================================================================
- */
-
 package org.dasein.cloud.vsphere.network;
 
 import com.vmware.vim25.InvalidProperty;
+import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.NetworkSummary;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.mo.*;
@@ -36,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.Random;
 
 /**
  * User: daniellemayne
@@ -115,6 +99,26 @@ public class VSphereNetwork extends AbstractVLANSupport{
         throw new OperationNotSupportedException("Internet gateways not supported in vSphere");
     }
 
+    @Override
+    public void removeInternetGatewayTags(@Nonnull String internetGatewayId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        //NO-OP
+    }
+
+    @Override
+    public void removeRoutingTableTags(@Nonnull String routingTableId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        //NO-OP
+    }
+
+    @Override
+    public void updateRoutingTableTags(@Nonnull String routingTableId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        //NO-OP
+    }
+
+    @Override
+    public void updateInternetGatewayTags(@Nonnull String internetGatewayId, @Nonnull Tag... tags) throws CloudException, InternalException {
+        //NO-OP
+    }
+
     @Nonnull
     @Override
     public Iterable<VLAN> listVlans() throws CloudException, InternalException {
@@ -123,26 +127,30 @@ public class VSphereNetwork extends AbstractVLANSupport{
             ServiceInstance instance = getServiceInstance();
 
             ArrayList<VLAN> networkList=new ArrayList<VLAN>();
-
-            Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, getContext().getRegionId());
-            DataCenter ourDC = provider.getDataCenterServices().listDataCenters(getContext().getRegionId()).iterator().next();
+            Datacenter dc;
             Network[] nets;
-            try {
-                nets = dc.getNetworks();
-                for(int d=0; d<nets.length; d++) {
-                    networkList.add(toVlan(nets[d], ourDC.getName()));
+            String rid = getContext().getRegionId();
+            if( rid != null ) {
+                dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, rid);
+
+                try {
+                    nets = dc.getNetworks();
+                    for(int d=0; d<nets.length; d++) {
+                        if (nets[d].getMOR().getType().equals("Network")) {
+                            networkList.add(toVlan(nets[d]));
+                        }
+                    }
+                }
+                catch( InvalidProperty e ) {
+                    throw new CloudException("No network support in cluster: " + e.getMessage());
+                }
+                catch( RuntimeFault e ) {
+                    throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+                }
+                catch( RemoteException e ) {
+                    throw new CloudException("Error in cluster processing request: " + e.getMessage());
                 }
             }
-            catch( InvalidProperty e ) {
-                throw new CloudException("No network support in cluster: " + e.getMessage());
-            }
-            catch( RuntimeFault e ) {
-                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
-            }
-            catch( RemoteException e ) {
-                throw new CloudException("Error in cluster processing request: " + e.getMessage());
-            }
-
             return networkList;
         }
         finally {
@@ -150,16 +158,14 @@ public class VSphereNetwork extends AbstractVLANSupport{
         }
     }
 
-    private VLAN toVlan(Network network, String dcName) throws InternalException, CloudException {
+    private VLAN toVlan(Network network) throws InternalException, CloudException {
         if (network != null) {
             VLAN vlan = new VLAN();
             vlan.setName(network.getName());
-            vlan.setDescription(vlan.getName());
-            // assumption that networks are per datacenter so this should be unique
-            vlan.setProviderVlanId(vlan.getName()+"_"+dcName);
+            vlan.setDescription(vlan.getName()+"("+network.getMOR().getVal()+")");
+            vlan.setProviderVlanId(vlan.getName());
             vlan.setCidr("");
             vlan.setProviderRegionId(getContext().getRegionId());
-            vlan.setProviderDataCenterId(dcName);
             vlan.setProviderOwnerId(getContext().getAccountNumber());
             vlan.setSupportedTraffic(IPVersion.IPV4);
             vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);

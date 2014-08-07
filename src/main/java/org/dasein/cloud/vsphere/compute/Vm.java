@@ -19,13 +19,7 @@
 package org.dasein.cloud.vsphere.compute;
 
 import java.rmi.RemoteException;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
@@ -232,7 +226,87 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("Not currently supported");
+        APITrace.begin(getProvider(), "Vm.alterVirtualMachine");
+        try {
+            ServiceInstance service = getServiceInstance();
+            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(service, vmId);
+            VirtualMachine virtualMachine = toServer(vm, "");
+
+            if( vm != null ) {
+                if (options.getProviderProductId() != null) {
+                    String productStr = options.getProviderProductId();
+                    String[] items = productStr.split(":");
+                    String resourcePoolId;
+                    int cpuCount;
+                    long memory;
+                    if (items.length == 3) {
+                        resourcePoolId = items[0];
+                        cpuCount = Integer.parseInt(items[1]);
+                        memory = Long.parseLong(items[2]);
+                        if (!resourcePoolId.equals(virtualMachine.getResourcePoolId())) {
+                            throw new CloudException("Unable to change resource pool when altering product size. Existing "+virtualMachine.getResourcePoolId()+", new "+resourcePoolId);
+                        }
+                    }
+                    else if (items.length == 2 ){
+                        cpuCount = Integer.parseInt(items[0]);
+                        memory = Long.parseLong(items[1]);
+                    }
+                    else {
+                        throw new CloudException("Unable to parse product string "+productStr);
+                    }
+
+                    VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+                    spec.setMemoryMB(memory);
+                    spec.setNumCPUs(cpuCount);
+
+                    try {
+                        CloudException lastError = null;
+                        Task task = vm.reconfigVM_Task(spec);
+
+                        String status = task.waitForTask();
+
+                        if( status.equals(Task.SUCCESS) ) {
+                            long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
+
+                            while( System.currentTimeMillis() < timeout ) {
+                                try { Thread.sleep(10000L); }
+                                catch( InterruptedException ignore ) { }
+
+                                for( VirtualMachine s : listVirtualMachines() ) {
+                                    if( s.getProviderVirtualMachineId().equals(vmId) ) {
+                                        return s;
+                                    }
+                                }
+                            }
+                            lastError = new CloudException("Unable to identify updated server.");
+                        }
+                        else {
+                            lastError = new CloudException("Failed to update VM: " + task.getTaskInfo().getError().getLocalizedMessage());
+                        }
+                        if( lastError != null ) {
+                            throw lastError;
+                        }
+                        throw new CloudException("No server and no error");
+                    }
+                    catch( InvalidProperty e ) {
+                        throw new CloudException(e);
+                    }
+                    catch( RuntimeFault e ) {
+                        throw new InternalException(e);
+                    }
+                    catch( RemoteException e ) {
+                        throw new CloudException(e);
+                    }
+                    catch (InterruptedException e) {
+                        throw new CloudException(e);
+                    }
+                }
+            }
+            return null;
+        }
+        finally {
+            APITrace.end();
+        }
     }
 
     @Override
@@ -759,12 +833,12 @@ public class Vm extends AbstractVMSupport {
         }
         return product;
     }
-    
+
     @Override
-    public @Nonnull Collection<VirtualMachineProduct> listProducts(@Nonnull Architecture architecture) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.listProducts(Architecture)");
+    public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options, Architecture architecture) throws InternalException, CloudException {
+        APITrace.begin(provider, "Vm.listProducts(VirtualMachineProductFilterOptions, Architecture)");
         try {
-            ArrayList<VirtualMachineProduct> sizes = new ArrayList<VirtualMachineProduct>();
+            ArrayList<VirtualMachineProduct> allVirtualMachineProducts = new ArrayList<VirtualMachineProduct>();
 
             Cache<org.dasein.cloud.dc.ResourcePool> cache = Cache.getInstance(provider, "resourcePools", org.dasein.cloud.dc.ResourcePool.class, CacheLevel.REGION_ACCOUNT, new TimePeriod<Minute>(15, TimePeriod.MINUTE));
             Collection<org.dasein.cloud.dc.ResourcePool> rps = (Collection<org.dasein.cloud.dc.ResourcePool>)cache.get(getContext());
@@ -780,118 +854,119 @@ public class Vm extends AbstractVMSupport {
                 cache.put(getContext(),rps);
             }
 
-            for( Architecture a : getCapabilities().listSupportedArchitectures() ) {
-                if( a.equals(architecture) ) {
-                    if( a.equals(Architecture.I32) ) {
-                        for( int cpu : new int[] { 1, 2 } ) {
-                            for( int ram : new int[] { 512, 1024, 2048 } ) {
-                                // add in product without pool
-                                VirtualMachineProduct product = new VirtualMachineProduct();
+            if (architecture != null) {
+                for( Architecture a : getCapabilities().listSupportedArchitectures() ) {
+                    if( a.equals(architecture) ) {
+                        if( a.equals(Architecture.I32) ) {
+                            for( int cpu : new int[] { 1, 2 } ) {
+                                for( int ram : new int[] { 512, 1024, 2048 } ) {
+                                    // add in product without pool
+                                    VirtualMachineProduct product = new VirtualMachineProduct();
 
-                                product.setCpuCount(cpu);
-                                product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                product.setName(cpu + " CPU/" + ram + " GB RAM");
-                                product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
-                                product.setProviderProductId(cpu + ":" + ram);
-                                product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
-                                sizes.add(product);
-
-                                //resource pools
-                                for (org.dasein.cloud.dc.ResourcePool pool : rps) {
-                                    product = new VirtualMachineProduct();
                                     product.setCpuCount(cpu);
                                     product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                    product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                    product.setName(cpu + " CPU/" + ram + " GB RAM");
                                     product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
-                                    product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
+                                    product.setProviderProductId(cpu + ":" + ram);
                                     product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
-                                    sizes.add(product);
+                                    allVirtualMachineProducts.add(product);
+
+                                    //resource pools
+                                    for (org.dasein.cloud.dc.ResourcePool pool : rps) {
+                                        product = new VirtualMachineProduct();
+                                        product.setCpuCount(cpu);
+                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                        product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                                        product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
+                                        product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                        allVirtualMachineProducts.add(product);
+                                    }
+                                }
+                            }
+                        }
+                        else {
+                            for( int cpu : new int[] { 1, 2, 4, 8 } ) {
+                                for( int ram : new int[] { 1024, 2048, 4096, 10240, 20480 } ) {
+                                    // add in product without pool
+                                    VirtualMachineProduct product = new VirtualMachineProduct();
+
+                                    product.setCpuCount(cpu);
+                                    product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                                    product.setName(cpu + " CPU/" + ram + " GB RAM");
+                                    product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                                    product.setProviderProductId(cpu + ":" + ram);
+                                    product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                    allVirtualMachineProducts.add(product);
+
+                                    //resource pools
+                                    for (org.dasein.cloud.dc.ResourcePool pool : rps) {
+                                        product = new VirtualMachineProduct();
+                                        product.setCpuCount(cpu);
+                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                        product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                                        product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
+                                        product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                        allVirtualMachineProducts.add(product);
+                                    }
                                 }
                             }
                         }
                     }
-                    else {
-                        for( int cpu : new int[] { 1, 2, 4, 8 } ) {
-                            for( int ram : new int[] { 1024, 2048, 4096, 10240, 20480 } ) {
-                                // add in product without pool
-                                VirtualMachineProduct product = new VirtualMachineProduct();
-
-                                product.setCpuCount(cpu);
-                                product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                product.setName(cpu + " CPU/" + ram + " GB RAM");
-                                product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
-                                product.setProviderProductId(cpu + ":" + ram);
-                                product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
-                                sizes.add(product);
-
-                                //resource pools
-                                for (org.dasein.cloud.dc.ResourcePool pool : rps) {
-                                    product = new VirtualMachineProduct();
-                                    product.setCpuCount(cpu);
-                                    product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                    product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
-                                    product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
-                                    product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
-                                    product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
-                                    sizes.add(product);
-                                }
-                            }
-                        }
-                    }
-                    return sizes;
                 }
             }
-            return Collections.emptyList();
+            else {
+                for( int cpu : new int[] { 1, 2, 4, 8 } ) {
+                    for( int ram : new int[] { 512, 1024, 2048, 4096, 10240, 20480 } ) {
+                        // add in product without pool
+                        VirtualMachineProduct product = new VirtualMachineProduct();
+
+                        product.setCpuCount(cpu);
+                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                        product.setName(cpu + " CPU/" + ram + " GB RAM");
+                        product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                        product.setProviderProductId(cpu + ":" + ram);
+                        product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                        allVirtualMachineProducts.add(product);
+
+                        //resource pools
+                        for (org.dasein.cloud.dc.ResourcePool pool : rps) {
+                            product = new VirtualMachineProduct();
+                            product.setCpuCount(cpu);
+                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
+                            product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                            product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+                            product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
+                            product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                            allVirtualMachineProducts.add(product);
+                        }
+                    }
+                }
+            }
+            if (options != null) {
+                ArrayList<VirtualMachineProduct> filteredProducts = new ArrayList<VirtualMachineProduct>();
+                for (VirtualMachineProduct product : allVirtualMachineProducts) {
+                    if (options.matches(product)) {
+                        filteredProducts.add(product);
+                    }
+                }
+                return filteredProducts;
+            }
+            else {
+                return allVirtualMachineProducts;
+            }
         }
         finally {
             APITrace.end();
         }
     }
 
-    @Override
-    public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options) throws InternalException, CloudException {
-        Iterable<VirtualMachineProduct> i64List = listProducts(Architecture.I64);
-        Iterable<VirtualMachineProduct> i32List = listProducts(Architecture.I32);
-        ArrayList<VirtualMachineProduct> combinedList = new ArrayList<VirtualMachineProduct>();
-
-        for (VirtualMachineProduct product : i64List) {
-            if (options.matches(product)) {
-                combinedList.add(product);
-            }
-        }
-        for (VirtualMachineProduct product : i32List) {
-            if (options.matches(product)) {
-                combinedList.add(product);
-            }
-        }
-        return combinedList;
-    }
-
-    @Override
-    public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options, Architecture architecture) throws InternalException, CloudException {
-        Iterable<VirtualMachineProduct> list = listProducts(architecture);
-        ArrayList<VirtualMachineProduct> combinedList = new ArrayList<VirtualMachineProduct>();
-
-        for (VirtualMachineProduct product : list) {
-            if (options.matches(product)) {
-                combinedList.add(product);
-            }
-        }
-        return combinedList;
-    }
-
     static private Collection<Architecture> architectures;
 
     @Override
     public Iterable<Architecture> listSupportedArchitectures() throws InternalException, CloudException {
-        if( architectures == null ) {
-            ArrayList<Architecture> list = new ArrayList<Architecture>();
-
-            list.add(Architecture.I32);
-            list.add(Architecture.I64);
-            architectures = Collections.unmodifiableCollection(list);
-        }
-        return architectures;
+        return getCapabilities().listSupportedArchitectures();
     }
 
     @Override

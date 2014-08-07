@@ -780,12 +780,12 @@ public class Vm extends AbstractVMSupport {
     public @Nullable VirtualMachineProduct getProduct(@Nonnull String productId) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getProduct(String)");
         try {
-            for( VirtualMachineProduct product : listProducts(Architecture.I64) ) {
+            for( VirtualMachineProduct product : listProducts(null, Architecture.I64) ) {
                 if( product.getProviderProductId().equals(productId) ) {
                     return product;
                 }
             }
-            for( VirtualMachineProduct product : listProducts(Architecture.I32) ) {
+            for( VirtualMachineProduct product : listProducts(null, Architecture.I32) ) {
                 if( product.getProviderProductId().equals(productId) ) {
                     return product;
                 }

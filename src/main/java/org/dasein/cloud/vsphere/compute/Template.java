@@ -22,6 +22,7 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 
 import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
@@ -156,7 +157,7 @@ public class Template extends AbstractImageSupport {
     public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
         return new String[0];
     }
-    
+
     private @Nullable MachineImage toMachineImage(@Nullable VirtualMachine template) throws InternalException, CloudException {
         if( template != null ) {
             VirtualMachineConfigInfo vminfo;
@@ -246,6 +247,11 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public boolean isImageSharedWithPublic(@Nonnull String machineImageId) throws CloudException, InternalException {
+        try {
+            VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(machineImageId);
+            return true;
+        }
+        catch( IllegalArgumentException ignore ) {}
         return false;
     }
 
@@ -324,13 +330,48 @@ public class Template extends AbstractImageSupport {
         }
     }
 
+    @Nonnull
     @Override
-    public @Nonnull Iterable<MachineImage> searchMachineImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture) throws CloudException, InternalException {
-        return searchImages(null, keyword, platform, architecture, ImageClass.MACHINE);
+    public Iterable<MachineImage> searchPublicImages(@Nonnull ImageFilterOptions options) throws CloudException, InternalException {
+        List<MachineImage> list = new ArrayList<MachineImage>();
+        VirtualMachineGuestOsIdentifier[] osValues = VirtualMachineGuestOsIdentifier.values();
+        for (VirtualMachineGuestOsIdentifier os : osValues) {
+            if (!os.name().startsWith("other")) {
+                MachineImage img = toMachineImage(os);
+                if (options!= null) {
+                    if (options.matches(img)) {
+                        list.add(img);
+                    }
+                }
+                else {
+                    list.add(img);
+                }
+            }
+        }
+        return list;
     }
 
-    @Override
-    public @Nonnull Iterable<MachineImage> searchPublicImages(@Nullable String keyword, @Nullable Platform platform, @Nullable Architecture architecture, @Nullable ImageClass... imageClasses) throws CloudException, InternalException {
-        return Collections.emptyList();
+    private @Nullable MachineImage toMachineImage(@Nonnull VirtualMachineGuestOsIdentifier osIdentifier) throws InternalException, CloudException {
+        MachineImage image = null;
+        String ownerId = null, regionId = null, imageId = null, name = null, description = null;
+        Architecture arch = null;
+        MachineImageState state = MachineImageState.ACTIVE;
+        Platform platform;
+
+        platform = Platform.guess(osIdentifier.name());
+        arch = provider.getComputeServices().getVirtualMachineSupport().getArchitecture(osIdentifier);
+        description = osIdentifier.name();
+        name = osIdentifier.name();
+        ownerId = getContext().getAccountNumber();
+        imageId = osIdentifier.name();
+        regionId = getContext().getRegionId();
+
+        image = MachineImage.getMachineImageInstance(ownerId, regionId, imageId, state, name, description, arch, platform);
+        image.withSoftware("");
+        image.setTags(new HashMap<String, String>());
+        if (imageId != null && name != null) {
+            return image;
+        }
+        return null;
     }
 }

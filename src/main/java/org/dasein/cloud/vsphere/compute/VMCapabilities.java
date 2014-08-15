@@ -49,7 +49,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
 
     @Override
     public boolean canAlter(@Nonnull VmState fromState) throws CloudException, InternalException {
-        return false;
+        return fromState.equals(VmState.STOPPED);
     }
 
     @Override
@@ -116,7 +116,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Nullable
     @Override
     public VMScalingCapabilities getVerticalScalingCapabilities() throws CloudException, InternalException {
-        return null;
+        return VMScalingCapabilities.getInstance(false,true,Requirement.REQUIRED,Requirement.REQUIRED);
     }
 
     @Nonnull
@@ -223,7 +223,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
 
     @Override
     public boolean supportsAlterVM() {
-        return false;
+        return true;
     }
 
     @Override

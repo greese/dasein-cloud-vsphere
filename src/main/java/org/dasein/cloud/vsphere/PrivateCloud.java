@@ -289,7 +289,7 @@ public class PrivateCloud extends AbstractCloud {
                 return ctx.getAccountNumber();
             }
             catch( Throwable t ) {
-                logger.warn("testContext(): Failed to test vSphere context: " + t.getMessage());
+                logger.error("testContext(): Failed to test vSphere context: " + t.getMessage());
                 if( logger.isTraceEnabled() ) {
                     t.printStackTrace();
                 }

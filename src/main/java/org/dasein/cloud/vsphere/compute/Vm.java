@@ -436,6 +436,12 @@ public class Vm extends AbstractVMSupport {
                 for( ManagedEntity p : pools ) {
                     ResourcePool pool = (ResourcePool)p;
                     Folder vmFolder = vdc.getVmFolder();
+                    if (options.getVmFolderId() != null) {
+                        ManagedEntity tmp = new InventoryNavigator(vmFolder).searchManagedEntity("Folder", options.getVmFolderId());
+                        if (tmp != null) {
+                            vmFolder = (Folder)tmp;
+                        }
+                    }
 
                     VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
                     String[] vmInfo = options.getStandardProductId().split(":");
@@ -697,6 +703,12 @@ public class Vm extends AbstractVMSupport {
                 for( ManagedEntity p : pools ) {
                     ResourcePool pool = (ResourcePool)p;
                     Folder vmFolder = vdc.getVmFolder();
+                    if (options.getVmFolderId() != null) {
+                        ManagedEntity tmp = new InventoryNavigator(vmFolder).searchManagedEntity("Folder", options.getVmFolderId());
+                        if (tmp != null) {
+                            vmFolder = (Folder)tmp;
+                        }
+                    }
 
                     VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
                     String[] vmInfo = options.getStandardProductId().split(":");
@@ -839,7 +851,7 @@ public class Vm extends AbstractVMSupport {
             return Architecture.I32;
         }
     }
-    
+
     @Nonnull HostSystem getBestHost(@Nonnull Datacenter forDatacenter, @Nonnull String clusterName) throws CloudException, RemoteException {
         APITrace.begin(provider, "Vm.getBestHost");
         try {
@@ -942,7 +954,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance service, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
         APITrace.begin(provider, "Vm.getTemplate");
         try {
@@ -969,8 +981,8 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
-    @Override 
+
+    @Override
     public @Nullable VirtualMachineProduct getProduct(@Nonnull String productId) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getProduct(String)");
         try {
@@ -990,7 +1002,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     @Override
     public @Nullable VirtualMachine getVirtualMachine(@Nonnull String serverId) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getVirtualMachine");
@@ -1012,7 +1024,7 @@ public class Vm extends AbstractVMSupport {
     private @Nonnull VirtualMachineProduct getProduct(@Nonnull VirtualHardware hardware) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getProduct(VirtualHardware)");
         VirtualMachineProduct product = getProduct(hardware.getNumCPU() + ":" + hardware.getMemoryMB());
-        
+
         if( product == null ) {
             int cpu = hardware.getNumCPU();
             int ram = hardware.getMemoryMB();
@@ -1236,7 +1248,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private @Nullable Datacenter getVmwareDatacenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws CloudException {
         ManagedEntity parent = vm.getParent();
 
@@ -1454,7 +1466,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private void powerOnAndOff(@Nonnull String serverId) {
         APITrace.begin(provider, "Vm.powerOnAndOff");
         try {
@@ -1553,19 +1565,19 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private boolean isPublicIpAddress(@Nonnull String ipv4Address) {
         if( ipv4Address.startsWith("10.") || ipv4Address.startsWith("192.168") || ipv4Address.startsWith("169.254") ) {
             return false;
         }
         else if( ipv4Address.startsWith("172.") ) {
             String[] parts = ipv4Address.split("\\.");
-            
+
             if( parts.length != 4 ) {
                 return true;
             }
             int x = Integer.parseInt(parts[1]);
-            
+
             if( x >= 16 && x <= 31 ) {
                 return false;
             }
@@ -1634,6 +1646,15 @@ public class Vm extends AbstractVMSupport {
             VirtualMachineConfigInfoDatastoreUrlPair[] datastoreUrl = vminfo.getDatastoreUrl();
             for (int i=0;i<datastoreUrl.length; i++) {
                 properties.put("datastore"+i,datastoreUrl[i].getName());
+            }
+
+            ManagedEntity parent = vm.getParent();
+            while (parent != null) {
+                if (parent instanceof Folder) {
+                    properties.put("vmFolder", parent.getName());
+                    break;
+                }
+                parent = parent.getParent();
             }
 
             VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(vminfo.getGuestId());

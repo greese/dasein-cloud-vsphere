@@ -39,4 +39,9 @@ public class DCCapabilities extends AbstractCapabilities<PrivateCloud> implement
     public boolean supportsStoragePools() {
         return true;
     }
+
+    @Override
+    public boolean supportsFolders() {
+        return true;
+    }
 }

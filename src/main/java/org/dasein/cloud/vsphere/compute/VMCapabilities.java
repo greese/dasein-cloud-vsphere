@@ -180,7 +180,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Nonnull
     @Override
     public Requirement identifyVlanRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
+        return Requirement.OPTIONAL;
     }
 
     @Override

@@ -494,7 +494,7 @@ public class Dc implements DataCenterServices {
                     rps = listResourcePoolsForCluster(dc.getProviderDataCenterId());
                 }
                 for (ResourcePool rp : rps) {
-                    if (rp.getName().equals(providerResourcePoolId)) {
+                    if (getIdForResourcePool(rp).equals(providerResourcePoolId)) {
                         return rp;
                     }
                 }

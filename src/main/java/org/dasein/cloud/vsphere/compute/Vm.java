@@ -24,7 +24,6 @@ import java.util.*;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
-import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.ResourceStatus;
 import org.apache.log4j.Logger;
@@ -43,6 +42,7 @@ import com.vmware.vim25.GuestNicInfo;
 import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedEntityStatus;
+import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInProgress;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
@@ -56,6 +56,7 @@ import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigInfoDatastoreUrlPair;
 import com.vmware.vim25.VirtualMachineConfigSpec;
+import com.vmware.vim25.VirtualMachineFileInfo;
 import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
@@ -67,7 +68,6 @@ import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
-import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.mo.ResourcePool;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
@@ -358,7 +358,7 @@ public class Vm extends AbstractVMSupport {
 
     private Random random = new Random();
     
-    private @Nonnull VirtualMachine define(@Nonnull VMLaunchOptions options) throws InternalException, CloudException {
+    private @Nonnull VirtualMachine defineFromTemplate(@Nonnull VMLaunchOptions options) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.define");
         try {
             ProviderContext ctx = provider.getContext();
@@ -420,20 +420,6 @@ public class Vm extends AbstractVMSupport {
                         }
                     }
                 }
-                /* not entirely sure this is ever reached
-                if( vdc == null ) {
-
-                    if( provider.isClusterBased() ) {
-                        vdc = getVmwareDatacenter(template);
-                        if (options.getResourcePoolId() == null) {
-                            pools = randomize(new InventoryNavigator(vdc).searchManagedEntities("ResourcePool"));
-                        }
-
-                    }
-                    if( vdc == null ) {
-                        throw new CloudException("Could not identify a valid data center (" + dataCenterId + " attempted)");
-                    }
-                } */
 
                 CloudException lastError = null;
 
@@ -450,6 +436,12 @@ public class Vm extends AbstractVMSupport {
                 for( ManagedEntity p : pools ) {
                     ResourcePool pool = (ResourcePool)p;
                     Folder vmFolder = vdc.getVmFolder();
+                    if (options.getVmFolderId() != null) {
+                        ManagedEntity tmp = new InventoryNavigator(vmFolder).searchManagedEntity("Folder", options.getVmFolderId());
+                        if (tmp != null) {
+                            vmFolder = (Folder)tmp;
+                        }
+                    }
 
                     VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
                     String[] vmInfo = options.getStandardProductId().split(":");
@@ -637,6 +629,220 @@ public class Vm extends AbstractVMSupport {
         }
     }
 
+    private @Nonnull VirtualMachine defineFromScratch(@Nonnull VMLaunchOptions options) throws InternalException, CloudException {
+        APITrace.begin(provider, "Vm.define");
+        try {
+            ProviderContext ctx = provider.getContext();
+
+            if( ctx == null ) {
+                throw new InternalException("No context was set for this request");
+            }
+            ServiceInstance service = getServiceInstance();
+            try {
+                String hostName = validateName(options.getHostName());
+                String dataCenterId = options.getDataCenterId();
+                String resourceProductStr = options.getStandardProductId();
+                String imageId = options.getMachineImageId();
+                String[] items = resourceProductStr.split(":");
+                if (items.length==3) {
+                    options.withResourcePoolId(items[0]);
+                }
+
+                if( dataCenterId == null ) {
+                    String rid = ctx.getRegionId();
+
+                    if( rid != null ) {
+                        for( DataCenter dsdc : provider.getDataCenterServices().listDataCenters(rid) ) {
+                            dataCenterId = dsdc.getProviderDataCenterId();
+                            if( random.nextInt()%3 == 0 ) {
+                                break;
+                            }
+                        }
+                    }
+                }
+                ManagedEntity[] pools = null;
+
+                Datacenter vdc = null;
+
+                if( dataCenterId != null ) {
+                    DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dataCenterId);
+                    if (ourDC != null) {
+                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, ourDC.getRegionId());
+
+                        if( vdc == null ) {
+                            throw new CloudException("Unable to identify VDC " + dataCenterId);
+                        }
+
+                        if (options.getResourcePoolId() == null) {
+                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(service, dataCenterId);
+                            if( pool != null ) {
+                                pools = new ManagedEntity[] { pool };
+                            }
+                        }
+                    }
+                    else {
+                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dataCenterId);
+                        if (options.getResourcePoolId() == null) {
+                            pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
+                        }
+                    }
+                }
+
+                CloudException lastError = null;
+
+                if (options.getResourcePoolId() != null) {
+                    ResourcePool pool = provider.getDataCenterServices().getVMWareResourcePool(options.getResourcePoolId());
+                    if (pool != null) {
+                        pools = new ManagedEntity[] {pool};
+                    }
+                    else {
+                        throw new CloudException("Unable to find resource pool with id "+options.getResourcePoolId());
+                    }
+                }
+
+                for( ManagedEntity p : pools ) {
+                    ResourcePool pool = (ResourcePool)p;
+                    Folder vmFolder = vdc.getVmFolder();
+                    if (options.getVmFolderId() != null) {
+                        ManagedEntity tmp = new InventoryNavigator(vmFolder).searchManagedEntity("Folder", options.getVmFolderId());
+                        if (tmp != null) {
+                            vmFolder = (Folder)tmp;
+                        }
+                    }
+
+                    VirtualMachineConfigSpec config = new VirtualMachineConfigSpec();
+                    String[] vmInfo = options.getStandardProductId().split(":");
+                    int cpuCount;
+                    long memory;
+                    if (vmInfo.length == 2) {
+                        cpuCount = Integer.parseInt(vmInfo[0]);
+                        memory = Long.parseLong(vmInfo[1]);
+                    }
+                    else {
+                        cpuCount = Integer.parseInt(vmInfo[1]);
+                        memory = Long.parseLong(vmInfo[2]);
+                    }
+
+                    config.setName(hostName);
+                    config.setAnnotation(imageId);
+                    config.setMemoryMB(memory);
+                    config.setNumCPUs(cpuCount);
+                    config.setGuestId(imageId);
+
+                    // create vm file info for the vmx file
+                    VirtualMachineFileInfo vmfi = new VirtualMachineFileInfo();
+                    String vmDataStoreName = null;
+                    Datastore[] datastores = vdc.getDatastores();
+                    for (Datastore ds : datastores) {
+                        if (options.getStoragePoolId() != null) {
+                            String locationId = options.getStoragePoolId();
+                            if (ds.getName().equals(locationId)) {
+                                vmDataStoreName = ds.getName();
+                                break;
+                            }
+                        }
+                        else {
+                            //just pick the first datastore as user doesn't care
+                            vmDataStoreName = ds.getName();
+                            break;
+                        }
+                    }
+                    if (vmDataStoreName == null) {
+                        throw new CloudException("Unable to find a datastore for vm "+hostName);
+                    }
+
+                    vmfi.setVmPathName("["+ vmDataStoreName +"]");
+                    config.setFiles(vmfi);
+
+                    //networking section
+                    //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
+                    String vlan = options.getVlanId();
+                    if (vlan != null) {
+                        VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                        nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+
+                        VirtualEthernetCard nic = new VirtualE1000();
+                        nic.setConnectable(new VirtualDeviceConnectInfo());
+                        nic.connectable.connected=true;
+                        nic.connectable.startConnected=true;
+
+                        Description info = new Description();
+                        info.setLabel(vlan);
+                        info.setSummary("Nic for network "+vlan);
+
+                        VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                        nicBacking.setDeviceName(vlan);
+
+                        nic.setAddressType("generated");
+                        nic.setBacking(nicBacking);
+                        nic.setKey(0);
+
+                        nicSpec.setDevice(nic);
+
+                        VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[1];
+                        machineSpecs[0]=nicSpec;
+
+                        config.setDeviceChange(machineSpecs);
+                        // end networking section
+                    }
+                    else {
+                        throw new CloudException("You must choose a network when creating a vm from scratch");
+                    }
+
+                   // VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
+                    HostSystem host = null;
+                    if (options.getAffinityGroupId() != null) {
+
+                        Host agSupport= provider.getComputeServices().getAffinityGroupSupport();
+                        host = agSupport.getHostSystemForAffinity(options.getAffinityGroupId());
+                    }
+
+                    Task task = vmFolder.createVM_Task(config, pool, host);
+
+                    String status = task.waitForTask();
+
+                    if( status.equals(Task.SUCCESS) ) {
+                        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
+
+                        while( System.currentTimeMillis() < timeout ) {
+                            try { Thread.sleep(10000L); }
+                            catch( InterruptedException ignore ) { }
+
+                            for( VirtualMachine s : listVirtualMachines() ) {
+                                if( s.getName().equals(hostName) ) {
+                                    return s;
+                                }
+                            }
+                        }
+                        lastError = new CloudException("Unable to identify newly created server.");
+                    }
+                    else {
+                        lastError = new CloudException("Failed to create VM: " + task.getTaskInfo().getError().getLocalizedMessage());
+                    }
+                }
+                if( lastError != null ) {
+                    throw lastError;
+                }
+                throw new CloudException("No server and no error");
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException(e);
+            }
+            catch( RuntimeFault e ) {
+                throw new InternalException(e);
+            }
+            catch( RemoteException e ) {
+                throw new CloudException(e);
+            }
+            catch( InterruptedException e ) {
+                throw new InternalException(e);
+            }
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
     @Nonnull Architecture getArchitecture(@Nonnull VirtualMachineGuestOsIdentifier os) {
         if( os.name().contains("64") ) {
             return Architecture.I64;
@@ -645,7 +851,7 @@ public class Vm extends AbstractVMSupport {
             return Architecture.I32;
         }
     }
-    
+
     @Nonnull HostSystem getBestHost(@Nonnull Datacenter forDatacenter, @Nonnull String clusterName) throws CloudException, RemoteException {
         APITrace.begin(provider, "Vm.getBestHost");
         try {
@@ -748,7 +954,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance service, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
         APITrace.begin(provider, "Vm.getTemplate");
         try {
@@ -775,8 +981,8 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
-    @Override 
+
+    @Override
     public @Nullable VirtualMachineProduct getProduct(@Nonnull String productId) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getProduct(String)");
         try {
@@ -796,7 +1002,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     @Override
     public @Nullable VirtualMachine getVirtualMachine(@Nonnull String serverId) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getVirtualMachine");
@@ -818,7 +1024,7 @@ public class Vm extends AbstractVMSupport {
     private @Nonnull VirtualMachineProduct getProduct(@Nonnull VirtualHardware hardware) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.getProduct(VirtualHardware)");
         VirtualMachineProduct product = getProduct(hardware.getNumCPU() + ":" + hardware.getMemoryMB());
-        
+
         if( product == null ) {
             int cpu = hardware.getNumCPU();
             int ram = hardware.getMemoryMB();
@@ -1042,7 +1248,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private @Nullable Datacenter getVmwareDatacenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws CloudException {
         ManagedEntity parent = vm.getParent();
 
@@ -1062,7 +1268,32 @@ public class Vm extends AbstractVMSupport {
     public @Nonnull VirtualMachine launch(@Nonnull VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
         APITrace.begin(provider, "Vm.launch");
         try {
-            VirtualMachine server = define(withLaunchOptions);
+            ServiceInstance service = getServiceInstance();
+            VirtualMachine server;
+            boolean isOSId = false;
+            String imageId = withLaunchOptions.getMachineImageId();
+            try {
+                VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(imageId);
+                isOSId = true;
+            }
+            catch( IllegalArgumentException e ) {
+                 log.debug("Couldn't find a match to os identifier so trying existing templates instead: "+imageId);
+            }
+            if (!isOSId) {
+                try {
+                    com.vmware.vim25.mo.VirtualMachine template = getTemplate(service, imageId);
+                    if( template == null ) {
+                        throw new CloudException("No such template or guest os identifier: " + imageId);
+                    }
+                    server = defineFromTemplate(withLaunchOptions);
+                }
+                catch (RemoteException e) {
+                    throw new CloudException(e);
+                }
+            }
+            else {
+                server = defineFromScratch(withLaunchOptions);
+            }
 
             start(server.getProviderVirtualMachineId());
             return server;
@@ -1235,7 +1466,7 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private void powerOnAndOff(@Nonnull String serverId) {
         APITrace.begin(provider, "Vm.powerOnAndOff");
         try {
@@ -1334,19 +1565,19 @@ public class Vm extends AbstractVMSupport {
             APITrace.end();
         }
     }
-    
+
     private boolean isPublicIpAddress(@Nonnull String ipv4Address) {
         if( ipv4Address.startsWith("10.") || ipv4Address.startsWith("192.168") || ipv4Address.startsWith("169.254") ) {
             return false;
         }
         else if( ipv4Address.startsWith("172.") ) {
             String[] parts = ipv4Address.split("\\.");
-            
+
             if( parts.length != 4 ) {
                 return true;
             }
             int x = Integer.parseInt(parts[1]);
-            
+
             if( x >= 16 && x <= 31 ) {
                 return false;
             }
@@ -1415,6 +1646,15 @@ public class Vm extends AbstractVMSupport {
             VirtualMachineConfigInfoDatastoreUrlPair[] datastoreUrl = vminfo.getDatastoreUrl();
             for (int i=0;i<datastoreUrl.length; i++) {
                 properties.put("datastore"+i,datastoreUrl[i].getName());
+            }
+
+            ManagedEntity parent = vm.getParent();
+            while (parent != null) {
+                if (parent instanceof Folder) {
+                    properties.put("vmFolder", parent.getName());
+                    break;
+                }
+                parent = parent.getParent();
             }
 
             VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(vminfo.getGuestId());

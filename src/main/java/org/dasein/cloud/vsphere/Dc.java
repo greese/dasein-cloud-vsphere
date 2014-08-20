@@ -21,6 +21,8 @@ package org.dasein.cloud.vsphere;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 import com.vmware.vim25.*;
@@ -33,6 +35,7 @@ import org.dasein.cloud.ProviderContext;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.dc.DataCenterCapabilities;
 import org.dasein.cloud.dc.DataCenterServices;
+import org.dasein.cloud.dc.FolderType;
 import org.dasein.cloud.dc.Region;
 import org.dasein.cloud.dc.StoragePool;
 
@@ -55,7 +58,6 @@ import org.dasein.util.uom.time.TimePeriod;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
-import java.util.Collections;
 
 public class Dc implements DataCenterServices {
 
@@ -379,6 +381,33 @@ public class Dc implements DataCenterServices {
         }
     }
 
+    private void getFolderChildren(Folder folder, List<Folder> list) throws CloudException, InternalException {
+        APITrace.begin(provider, "DC.getFolderChildren(Folder)");
+        try {
+            try {
+                ManagedEntity[] children = folder.getChildEntity();
+                for (ManagedEntity child : children) {
+                    if (child instanceof Folder) {
+                        list.add((Folder)child);
+                        getFolderChildren((Folder)child, list);
+                    }
+                }
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException("No resource pool support in cluster: " + e.getMessage());
+            }
+            catch( RuntimeFault e ) {
+                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in cluster processing request: " + e.getMessage());
+            }
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
     private Collection<ResourcePool> listResourcePoolsForDatacenter(String dataCenterId) throws InternalException, CloudException {
         APITrace.begin(provider, "DC.listResourcePoolsForDatacenter");
         try {
@@ -481,6 +510,102 @@ public class Dc implements DataCenterServices {
         }
     }
 
+    @Nonnull
+    @Override
+    public StoragePool getStoragePool(String providerStoragePoolId) throws InternalException, CloudException {
+        APITrace.begin(provider, "DC.getStoragePool");
+        try {
+            Collection<StoragePool> pools = listStoragePools();
+            for (StoragePool pool : pools) {
+                if (pool.getStoragePoolId().equals(providerStoragePoolId)) {
+                    return pool;
+                }
+            }
+            return null;
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
+    @Nonnull
+    @Override
+    public Collection<org.dasein.cloud.dc.Folder> listVMFolders() throws InternalException, CloudException {
+        APITrace.begin(provider, "DC.listVMFolders");
+        try {
+            ProviderContext ctx = getContext();
+            List<Folder> vsphereList = new ArrayList<Folder>();
+            List<org.dasein.cloud.dc.Folder> list = new ArrayList<org.dasein.cloud.dc.Folder>();
+
+            ServiceInstance instance = getServiceInstance();
+            Datacenter dc = getVmwareDatacenterFromVDCId(instance, ctx.getRegionId());
+
+            if( dc == null ) {
+                throw new CloudException("No such dc: " + ctx.getRegionId());
+            }
+            try {
+                Folder vmFolder = dc.getVmFolder();
+                getFolderChildren(vmFolder, vsphereList);
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException("No cluster support in datacenter: " + e.getMessage());
+            }
+            catch( RuntimeFault e ) {
+                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in cluster processing request: " + e.getMessage());
+            }
+            for (Folder folder : vsphereList) {
+                org.dasein.cloud.dc.Folder f = toFolder(folder, FolderType.VM, true);
+                if (f != null) {
+                    list.add(f);
+                }
+            }
+            return list;
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
+    @Nonnull
+    @Override
+    public org.dasein.cloud.dc.Folder getVMFolder(String providerVMFolderId) throws InternalException, CloudException {
+        APITrace.begin(provider, "DC.getVMFolder");
+        try {
+            ProviderContext ctx = getContext();
+            ServiceInstance instance = getServiceInstance();
+            Datacenter dc = getVmwareDatacenterFromVDCId(instance, ctx.getRegionId());
+
+            if( dc == null ) {
+                throw new CloudException("No such dc: " + ctx.getRegionId());
+            }
+            try {
+                ManagedEntity tmp = new InventoryNavigator(dc.getVmFolder()).searchManagedEntity("Folder", providerVMFolderId);
+                if (tmp != null) {
+                    org.dasein.cloud.dc.Folder folder = toFolder((Folder)tmp, FolderType.VM, true);
+                    if (folder.getId().equals(providerVMFolderId)) {
+                        return folder;
+                    }
+                }
+                return null;
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException("No cluster support in region: " + e.getMessage());
+            }
+            catch( RuntimeFault e ) {
+                throw new CloudException("Error in processing request to region: " + e.getMessage());
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in region processing request: " + e.getMessage());
+            }
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
     public ResourcePool getVMWareResourcePool(String providerResourcePoolId) throws InternalException, CloudException {
         APITrace.begin(provider, "DC.getVMWareResourcePool");
         try {
@@ -494,7 +619,7 @@ public class Dc implements DataCenterServices {
                     rps = listResourcePoolsForCluster(dc.getProviderDataCenterId());
                 }
                 for (ResourcePool rp : rps) {
-                    if (rp.getName().equals(providerResourcePoolId)) {
+                    if (getIdForResourcePool(rp).equals(providerResourcePoolId)) {
                         return rp;
                     }
                 }
@@ -634,5 +759,42 @@ public class Dc implements DataCenterServices {
         sp.setFreeSpace((Storage<Megabyte>)new Storage<org.dasein.util.uom.storage.Byte>(freeBytes, Storage.BYTE).convertTo(Storage.MEGABYTE));
         sp.setProvisioned((Storage<Megabyte>)new Storage<org.dasein.util.uom.storage.Byte>(provisioned, Storage.BYTE).convertTo(Storage.MEGABYTE));
         return sp;
+    }
+
+    private org.dasein.cloud.dc.Folder toFolder(Folder folder, FolderType type, boolean checkRecursive) throws CloudException, InternalException{
+        org.dasein.cloud.dc.Folder f = new org.dasein.cloud.dc.Folder();
+        f.setId(folder.getName());
+        f.setName(folder.getName());
+        f.setType(type);
+
+        if (checkRecursive) {
+            ManagedEntity parent = folder.getParent();
+            if (parent instanceof Folder) {
+                org.dasein.cloud.dc.Folder parentFolder = toFolder((Folder)parent, type, false);
+                f.setParent(parentFolder);
+            }
+
+            try {
+                List<org.dasein.cloud.dc.Folder> childFolders = new ArrayList<org.dasein.cloud.dc.Folder>();
+                ManagedEntity[] children = folder.getChildEntity();
+                for (ManagedEntity child : children) {
+                    if (child instanceof Folder) {
+                        org.dasein.cloud.dc.Folder childFolder = toFolder((Folder) child, type, false);
+                        childFolders.add(childFolder);
+                    }
+                }
+                f.setChildren(childFolders);
+            }
+            catch( InvalidProperty e ) {
+                throw new CloudException("No folder support: " + e.getMessage());
+            }
+            catch( RuntimeFault e ) {
+                throw new CloudException("Error in processing request: " + e.getMessage());
+            }
+            catch( RemoteException e ) {
+                throw new CloudException("Error in folder processing request: " + e.getMessage());
+            }
+        }
+        return f;
     }
 }

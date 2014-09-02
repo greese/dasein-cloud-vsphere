@@ -19,10 +19,7 @@
 package org.dasein.cloud.vsphere.compute;
 
 import java.rmi.RemoteException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
@@ -41,6 +38,8 @@ import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.util.APITrace;
+import org.dasein.cloud.util.Cache;
+import org.dasein.cloud.util.CacheLevel;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import com.vmware.vim25.InvalidProperty;
@@ -54,6 +53,8 @@ import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.VirtualMachine;
+import org.dasein.util.uom.time.Day;
+import org.dasein.util.uom.time.TimePeriod;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -358,11 +359,14 @@ public class Template extends AbstractImageSupport {
         MachineImageState state = MachineImageState.ACTIVE;
         Platform platform;
 
-        platform = Platform.guess(osIdentifier.name());
         arch = provider.getComputeServices().getVirtualMachineSupport().getArchitecture(osIdentifier);
         description = osIdentifier.name();
-        name = osIdentifier.name();
-        ownerId = getContext().getAccountNumber();
+        name = getGuestOSNameMap().get(osIdentifier.name());
+        if (name == null || name.equals("")) {
+            name = osIdentifier.name();
+        }
+        platform = Platform.guess(name);
+        ownerId = "--public--";
         imageId = osIdentifier.name();
         regionId = getContext().getRegionId();
 
@@ -373,5 +377,132 @@ public class Template extends AbstractImageSupport {
             return image;
         }
         return null;
+    }
+
+    private @Nonnull
+    Map<String, String> getGuestOSNameMap() {
+        Cache<Map> cache = Cache.getInstance(provider, "guestOS", Map.class, CacheLevel.CLOUD, new TimePeriod<Day>(1, TimePeriod.DAY));
+        Collection<Map> list = (ArrayList<Map>)cache.get(provider.getContext());
+
+        if( list == null ) {
+            list = new ArrayList();
+            Map<String, String> osMap = new HashMap<String, String>();
+            osMap.put("asianux3_64Guest", "Asianux Server 3 (64 bit)");
+            osMap.put("asianux3Guest", "Asianux Server 3");
+            osMap.put("asianux4_64Guest", "Asianux Server 4 (64 bit)");
+            osMap.put("asianux4Guest", "Asianux Server 4");
+            osMap.put("centos64Guest", "CentOS 4/5 (64-bit)");
+            osMap.put("centosGuest", "CentOS 4/5");
+            osMap.put("darwin10_64Guest", "Mac OS 10.6 (64 bit)");
+            osMap.put("darwin10Guest", "Mac OS 10.6");
+            osMap.put("darwin11_64Guest", "Mac OS 10.7 (64 bit)");
+            osMap.put("darwin11Guest", "Mac OS 10.7");
+            osMap.put("darwin12_64Guest", "Mac OS 10.8 (64 bit)");
+            osMap.put("darwin13_64Guest", "Mac OS 10.9 (64 bit)");
+            osMap.put("darwin64Guest", "Mac OS 10.5 (64 bit)");
+            osMap.put("darwinGuest", "Mac OS 10.5");
+            osMap.put("debian4_64Guest", "Debian GNU/Linux 4 (64 bit)");
+            osMap.put("debian4Guest", "Debian GNU/Linux 4");
+            osMap.put("debian5_64Guest", "Debian GNU/Linux 5 (64 bit)");
+            osMap.put("debian5Guest", "Debian GNU/Linux 5");
+            osMap.put("debian6_64Guest", "Debian GNU/Linux 6 (64 bit)");
+            osMap.put("debian6Guest", "Debian GNU/Linux 6");
+            osMap.put("debian7_64Guest", "Debian GNU/Linux 7 (64 bit)");
+            osMap.put("debian7Guest", "Debian GNU/Linux 7");
+            osMap.put("dosGuest", "MS-DOS.");
+            osMap.put("eComStation2Guest", "eComStation 2.0");
+            osMap.put("eComStationGuest", "eComStation 1.x");
+            osMap.put("fedora64Guest", "Fedora Linux (64 bit)");
+            osMap.put("fedoraGuest", "Fedora Linux");
+            osMap.put("freebsd64Guest", "FreeBSD x64");
+            osMap.put("freebsdGuest", "FreeBSD");
+            osMap.put("genericLinuxGuest", "Other Linux");
+            osMap.put("mandrakeGuest", "Mandrake Linux");
+            osMap.put("mandriva64Guest", "Mandriva Linux (64 bit)");
+            osMap.put("mandrivaGuest", "Mandriva Linux");
+            osMap.put("netware4Guest", "Novell NetWare 4 ");
+            osMap.put("netware5Guest", "Novell NetWare 5.1");
+            osMap.put("netware6Guest", "Novell NetWare 6.x");
+            osMap.put("nld9Guest", "Novell Linux Desktop 9");
+            osMap.put("oesGuest", "Open Enterprise Server");
+            osMap.put("openServer5Guest", "SCO OpenServer 5");
+            osMap.put("openServer6Guest", "SCO OpenServer 6");
+            osMap.put("opensuse64Guest", "OpenSUSE Linux (64 bit)");
+            osMap.put("opensuseGuest", "OpenSUSE Linux");
+            osMap.put("oracleLinux64Guest", "Oracle Linux 4/5 (64-bit)");
+            osMap.put("oracleLinuxGuest", "Oracle Linux 4/5");
+            osMap.put("os2Guest", "OS/2");
+            osMap.put("redhatGuest", "Red Hat Linux 2.1");
+            osMap.put("rhel2Guest", "Red Hat Enterprise Linux 2");
+            osMap.put("rhel3_64Guest", "Red Hat Enterprise Linux 3 (64 bit)");
+            osMap.put("rhel3Guest", "Red Hat Enterprise Linux 3");
+            osMap.put("rhel4_64Guest", "Red Hat Enterprise Linux 4 (64 bit)");
+            osMap.put("rhel4Guest", "Red Hat Enterprise Linux 4");
+            osMap.put("rhel5_64Guest", "Red Hat Enterprise Linux 5 (64 bit)");
+            osMap.put("rhel5Guest", "Red Hat Enterprise Linux 5");
+            osMap.put("rhel6_64Guest", "Red Hat Enterprise Linux 6 (64 bit)");
+            osMap.put("rhel6Guest", "Red Hat Enterprise Linux 6");
+            osMap.put("rhel7_64Guest", "Red Hat Enterprise Linux 7 (64 bit)");
+            osMap.put("rhel7Guest", "Red Hat Enterprise Linux 7");
+            osMap.put("sjdsGuest", "Sun Java Desktop System");
+            osMap.put("sles10_64Guest", "Suse Linux Enterprise Server 10 (64 bit)");
+            osMap.put("sles10Guest", "Suse Linux Enterprise Server 10");
+            osMap.put("sles11_64Guest", "Suse Linux Enterprise Server 11 (64 bit)");
+            osMap.put("sles11Guest", "Suse Linux Enterprise Server 11");
+            osMap.put("sles12_64Guest", "Suse Linux Enterprise Server 12 (64 bit)");
+            osMap.put("sles12Guest", "Suse linux Enterprise Server 12");
+            osMap.put("sles64Guest", "Suse Linux Enterprise Server 9 (64 bit)");
+            osMap.put("slesGuest", "Suse Linux Enterprise Server 9");
+            osMap.put("solaris10_64Guest", "Solaris 10 (64 bit) ");
+            osMap.put("solaris10Guest", "Solaris 10 (32 bit) ");
+            osMap.put("solaris11_64Guest", "Solaris 11 (64 bit)");
+            osMap.put("solaris6Guest", "Solaris 6");
+            osMap.put("solaris7Guest", "Solaris 7");
+            osMap.put("solaris8Guest", "Solaris 8");
+            osMap.put("solaris9Guest", "Solaris 9");
+            osMap.put("suse64Guest", "Suse Linux (64 bit)");
+            osMap.put("suseGuest", "Suse Linux");
+            osMap.put("turboLinux64Guest", "Turbolinux (64 bit)");
+            osMap.put("turboLinuxGuest", "Turbolinux");
+            osMap.put("ubuntu64Guest", "Ubuntu Linux (64 bit)");
+            osMap.put("ubuntuGuest", "Ubuntu Linux");
+            osMap.put("unixWare7Guest", "SCO UnixWare 7");
+            osMap.put("vmkernel5Guest", "VMware ESX 5");
+            osMap.put("vmkernelGuest", "VMware ESX 4");
+            osMap.put("win2000AdvServGuest", "Windows 2000 Advanced Server");
+            osMap.put("win2000ProGuest", "Windows 2000 Professional");
+            osMap.put("win2000ServGuest", "Windows 2000 Server");
+            osMap.put("win31Guest", "Windows 3.1");
+            osMap.put("win95Guest", "Windows 95");
+            osMap.put("win98Guest", "Windows 98");
+            osMap.put("windows7_64Guest", "Windows 7 (64 bit)");
+            osMap.put("windows7Guest", "Windows 7");
+            osMap.put("windows7Server64Guest", "Windows Server 2008 R2 (64 bit)");
+            osMap.put("windows8_64Guest", "Windows 8 (64 bit)");
+            osMap.put("windows8Guest", "Windows 8");
+            osMap.put("windows8Server64Guest", "Windows 8 Server (64 bit)");
+            osMap.put("windowsHyperVGuest", "Windows Hyper-V");
+            osMap.put("winLonghorn64Guest", "Windows Longhorn (64 bit)");
+            osMap.put("winLonghornGuest", "Windows Longhorn");
+            osMap.put("winMeGuest", "Windows Millenium Edition");
+            osMap.put("winNetBusinessGuest", "Windows Small Business Server 2003");
+            osMap.put("winNetDatacenter64Guest", "Windows Server 2003, Datacenter Edition (64 bit)");
+            osMap.put("winNetDatacenterGuest", "Windows Server 2003, Datacenter Edition");
+            osMap.put("winNetEnterprise64Guest", "Windows Server 2003, Enterprise Edition (64 bit)");
+            osMap.put("winNetEnterpriseGuest", "Windows Server 2003, Enterprise Edition");
+            osMap.put("winNetStandard64Guest", "Windows Server 2003, Standard Edition (64 bit)");
+            osMap.put("winNetStandardGuest", "Windows Server 2003, Standard Edition");
+            osMap.put("winNetWebGuest", "Windows Server 2003, Web Edition");
+            osMap.put("winNTGuest", "Windows NT 4");
+            osMap.put("winVista64Guest", "Windows Vista (64 bit)");
+            osMap.put("winVistaGuest", "Windows Vista");
+            osMap.put("winXPHomeGuest", "Windows XP Home Edition");
+            osMap.put("winXPPro64Guest", "Windows XP Professional Edition (64 bit)");
+            osMap.put("winXPProGuest", "Windows XP Professional");
+
+            list.add(osMap);
+            cache.put(provider.getContext(), list);
+        }
+        return list.iterator().next();
     }
 }

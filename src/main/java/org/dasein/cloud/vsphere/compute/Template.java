@@ -36,7 +36,6 @@ import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.MachineImageState;
 import org.dasein.cloud.compute.MachineImageType;
 import org.dasein.cloud.compute.Platform;
-import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.util.Cache;
@@ -55,7 +54,6 @@ import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.VirtualMachine;
 import org.dasein.util.uom.time.Day;
-import org.dasein.util.uom.time.Minute;
 import org.dasein.util.uom.time.TimePeriod;
 
 import javax.annotation.Nonnull;

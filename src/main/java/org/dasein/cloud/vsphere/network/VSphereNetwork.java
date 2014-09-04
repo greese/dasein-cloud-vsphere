@@ -135,9 +135,11 @@ public class VSphereNetwork extends AbstractVLANSupport{
 
                 try {
                     nets = dc.getNetworks();
-                    for(int d=0; d<nets.length; d++) {
-                        if (nets[d].getMOR().getType().equals("Network")) {
-                            networkList.add(toVlan(nets[d]));
+                    if (nets != null) {
+                        for(int d=0; d<nets.length; d++) {
+                            if (nets[d].getMOR().getType().equals("Network")) {
+                                networkList.add(toVlan(nets[d]));
+                            }
                         }
                     }
                 }

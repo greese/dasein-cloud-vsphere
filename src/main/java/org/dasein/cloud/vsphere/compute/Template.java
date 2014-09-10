@@ -35,6 +35,7 @@ import org.dasein.cloud.compute.ImageFilterOptions;
 import org.dasein.cloud.compute.MachineImage;
 import org.dasein.cloud.compute.MachineImageState;
 import org.dasein.cloud.compute.Platform;
+import org.dasein.cloud.dc.Region;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.util.Cache;
@@ -47,6 +48,7 @@ import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRuntimeInfo;
+import com.vmware.vim25.mo.Datacenter;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
@@ -193,7 +195,15 @@ public class Template extends AbstractImageSupport {
             name = (template.getName());
             ownerId = (getContext().getAccountNumber());
             imageId = (vminfo.getUuid());
-            regionId = (getContext().getRegionId());
+            ManagedEntity parent = template.getParent();
+            while (parent != null) {
+                if (parent instanceof Datacenter) {
+                    Region r = provider.getDataCenterServices().getRegion(parent.getName());
+                    regionId = r.getProviderRegionId();
+                    break;
+                }
+                parent = parent.getParent();
+            }
 
             VirtualMachineRuntimeInfo runtime = template.getRuntime();
             VirtualMachinePowerState state = VirtualMachinePowerState.poweredOff;

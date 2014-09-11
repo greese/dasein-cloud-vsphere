@@ -46,6 +46,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public class PrivateCloud extends AbstractCloud {
+    private ServiceInstance instance = null;
+
     static private @Nonnull String getLastItem(@Nonnull String name) {
         int idx = name.lastIndexOf('.');
         
@@ -185,43 +187,46 @@ public class PrivateCloud extends AbstractCloud {
     }
 
     public @Nullable ServiceInstance getServiceInstance() throws CloudException, InternalException {
-        ProviderContext ctx = getContext();
+        if (instance == null) {
+            ProviderContext ctx = getContext();
         
-        if( ctx == null ) {
-            throw new CloudException("No context exists for this request");
-        }
-        try {
-            String endpoint = ctx.getEndpoint();
-
-            String accessPublic = null;
-            String accessPrivate = null;
+            if( ctx == null ) {
+                throw new CloudException("No context exists for this request");
+            }
             try {
-                List<ContextRequirements.Field> fields = getContextRequirements().getConfigurableValues();
-                for(ContextRequirements.Field f : fields ) {
-                    if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
-                        byte[][] keyPair = (byte[][])getContext().getConfigurationValue(f);
-                        accessPublic = new String(keyPair[0], "utf-8");
-                        accessPrivate = new String(keyPair[1], "utf-8");
+                String endpoint = ctx.getEndpoint();
+
+                String accessPublic = null;
+                String accessPrivate = null;
+                try {
+                    List<ContextRequirements.Field> fields = getContextRequirements().getConfigurableValues();
+                    for(ContextRequirements.Field f : fields ) {
+                        if(f.type.equals(ContextRequirements.FieldType.KEYPAIR)){
+                            byte[][] keyPair = (byte[][])getContext().getConfigurationValue(f);
+                            accessPublic = new String(keyPair[0], "utf-8");
+                            accessPrivate = new String(keyPair[1], "utf-8");
+                        }
                     }
                 }
+                catch( UnsupportedEncodingException e ) {
+                    e.printStackTrace();
+                    throw new RuntimeException("This cannot happen: " + e.getMessage());
+                }
+                instance = new ServiceInstance(new URL(endpoint), accessPublic, accessPrivate, isInsecure());
             }
-            catch( UnsupportedEncodingException e ) {
+            catch( InvalidLogin e ) {
+                return null;
+            }
+            catch( RemoteException e ) {
                 e.printStackTrace();
-                throw new RuntimeException("This cannot happen: " + e.getMessage());
+                throw new CloudException("Error creating service instance: " + e.getMessage());
             }
-            return new ServiceInstance(new URL(endpoint), accessPublic, accessPrivate, isInsecure());
+            catch( MalformedURLException e ) {
+                e.printStackTrace();
+                throw new InternalException("Failed to generate endpoint URL for " + ctx.getEndpoint() + ": " + e.getMessage());
+            }
         }
-        catch( InvalidLogin e ) {
-            return null;
-        }
-        catch( RemoteException e ) {
-            e.printStackTrace();
-            throw new CloudException("Error creating service instance: " + e.getMessage());
-        }
-        catch( MalformedURLException e ) {
-            e.printStackTrace();
-            throw new InternalException("Failed to generate endpoint URL for " + ctx.getEndpoint() + ": " + e.getMessage());
-        }
+        return instance;
     }
 
     public @Nullable Folder getVmFolder(ServiceInstance instance) throws InternalException, CloudException {

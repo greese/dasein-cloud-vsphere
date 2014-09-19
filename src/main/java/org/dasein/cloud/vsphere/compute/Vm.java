@@ -151,7 +151,7 @@ public class Vm extends AbstractVMSupport {
         }
     }
 
-    @Nonnull com.vmware.vim25.mo.VirtualMachine clone(@Nonnull ServiceInstance service, @Nonnull com.vmware.vim25.mo.VirtualMachine vm, @Nonnull String name,  boolean asTemplate) throws InternalException, CloudException {
+    @Nonnull com.vmware.vim25.mo.VirtualMachine clone(@Nonnull ServiceInstance instance, @Nonnull com.vmware.vim25.mo.VirtualMachine vm, @Nonnull String name,  boolean asTemplate) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.clone(ServiceInstance, VirtualMachine)");
         try {
             try {
@@ -165,10 +165,10 @@ public class Vm extends AbstractVMSupport {
                 Datacenter dc = null;
                 DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dcId);
                 if (ourDC != null) {
-                    dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, ourDC.getRegionId());
+                    dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
                 }
                 else {
-                    dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dcId);
+                    dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dcId);
                 }
                 ResourcePool pool = vm.getResourcePool();
 
@@ -236,8 +236,8 @@ public class Vm extends AbstractVMSupport {
     public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
         APITrace.begin(getProvider(), "Vm.alterVirtualMachine");
         try {
-            ServiceInstance service = getServiceInstance();
-            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(service, vmId);
+            ServiceInstance instance = getServiceInstance();
+            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, vmId);
             VirtualMachine virtualMachine = toServer(vm, "");
 
             if( vm != null ) {
@@ -404,12 +404,12 @@ public class Vm extends AbstractVMSupport {
     public @Nonnull VirtualMachine clone(@Nonnull String serverId, @Nullable String intoDcId, @Nonnull String name, @Nonnull String description, boolean powerOn, @Nullable String ... firewallIds) throws InternalException, CloudException {
         APITrace.begin(provider, "Vm.clone");
         try {
-            ServiceInstance service = getServiceInstance();
+            ServiceInstance instance = getServiceInstance();
 
-            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(service, serverId);
+            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
 
             if( vm != null ) {
-                VirtualMachine target = toServer(clone(service, vm, name, false), description);
+                VirtualMachine target = toServer(clone(instance, vm, name, false), description);
 
                 if( target == null ) {
                     throw new CloudException("Request appeared to succeed, but no VM was created");
@@ -457,9 +457,9 @@ public class Vm extends AbstractVMSupport {
             if( ctx == null ) {
                 throw new InternalException("No context was set for this request");
             }
-            ServiceInstance service = getServiceInstance();
+            ServiceInstance instance = getServiceInstance();
             try {
-                com.vmware.vim25.mo.VirtualMachine template = getTemplate(service, options.getMachineImageId());
+                com.vmware.vim25.mo.VirtualMachine template = getTemplate(instance, options.getMachineImageId());
 
                 if( template == null ) {
                     throw new CloudException("No such template: " + options.getMachineImageId());
@@ -491,21 +491,21 @@ public class Vm extends AbstractVMSupport {
                 if( dataCenterId != null ) {
                     DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dataCenterId);
                     if (ourDC != null) {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, ourDC.getRegionId());
+                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
 
                         if( vdc == null ) {
                             throw new CloudException("Unable to identify VDC " + dataCenterId);
                         }
 
                         if (options.getResourcePoolId() == null) {
-                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(service, dataCenterId);
+                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(instance, dataCenterId);
                             if( pool != null ) {
                                 pools = new ManagedEntity[] { pool };
                             }
                         }
                     }
                     else {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dataCenterId);
+                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
                         if (options.getResourcePoolId() == null) {
                             pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
                         }
@@ -728,7 +728,7 @@ public class Vm extends AbstractVMSupport {
             if( ctx == null ) {
                 throw new InternalException("No context was set for this request");
             }
-            ServiceInstance service = getServiceInstance();
+            ServiceInstance instance = getServiceInstance();
             try {
                 String hostName = validateName(options.getHostName());
                 String dataCenterId = options.getDataCenterId();
@@ -758,21 +758,21 @@ public class Vm extends AbstractVMSupport {
                 if( dataCenterId != null ) {
                     DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dataCenterId);
                     if (ourDC != null) {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, ourDC.getRegionId());
+                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
 
                         if( vdc == null ) {
                             throw new CloudException("Unable to identify VDC " + dataCenterId);
                         }
 
                         if (options.getResourcePoolId() == null) {
-                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(service, dataCenterId);
+                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(instance, dataCenterId);
                             if( pool != null ) {
                                 pools = new ManagedEntity[] { pool };
                             }
                         }
                     }
                     else {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(service, dataCenterId);
+                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
                         if (options.getResourcePoolId() == null) {
                             pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
                         }
@@ -1046,10 +1046,10 @@ public class Vm extends AbstractVMSupport {
         }
     }
 
-    private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance service, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
+    private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance instance, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
         APITrace.begin(provider, "Vm.getTemplate");
         try {
-            Folder folder = provider.getVmFolder(service);
+            Folder folder = provider.getVmFolder(instance);
             ManagedEntity[] mes;
 
             mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
@@ -1359,7 +1359,7 @@ public class Vm extends AbstractVMSupport {
     public @Nonnull VirtualMachine launch(@Nonnull VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
         APITrace.begin(provider, "Vm.launch");
         try {
-            ServiceInstance service = getServiceInstance();
+            ServiceInstance instance = getServiceInstance();
             VirtualMachine server;
             boolean isOSId = false;
             String imageId = withLaunchOptions.getMachineImageId();
@@ -1372,7 +1372,7 @@ public class Vm extends AbstractVMSupport {
             }
             if (!isOSId) {
                 try {
-                    com.vmware.vim25.mo.VirtualMachine template = getTemplate(service, imageId);
+                    com.vmware.vim25.mo.VirtualMachine template = getTemplate(instance, imageId);
                     if( template == null ) {
                         throw new CloudException("No such template or guest os identifier: " + imageId);
                     }
@@ -1562,9 +1562,9 @@ public class Vm extends AbstractVMSupport {
         APITrace.begin(provider, "Vm.powerOnAndOff");
         try {
             try {
-                ServiceInstance service = provider.getServiceInstance();
+                ServiceInstance instance = provider.getServiceInstance();
 
-                com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(service, serverId);
+                com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
                 HostSystem host = getHost(vm);
 
                 if( vm != null ) {
@@ -1577,7 +1577,7 @@ public class Vm extends AbstractVMSupport {
                     else {
                         try { Thread.sleep(15000L); }
                         catch( InterruptedException ignore ) { /* ignore */ }
-                        vm = getVirtualMachine(service, serverId);
+                        vm = getVirtualMachine(instance, serverId);
                         vm.powerOnVM_Task(host);
                     }
                 }
@@ -1618,9 +1618,9 @@ public class Vm extends AbstractVMSupport {
         APITrace.begin(provider, "Vm.terminateVm");
         try {
             try {
-                ServiceInstance service = getServiceInstance();
+                ServiceInstance instance = getServiceInstance();
 
-                com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(service, serverId);
+                com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
 
                 if( vm != null ) {
                     VirtualMachineRuntimeInfo runtime = vm.getRuntime();
@@ -1640,7 +1640,7 @@ public class Vm extends AbstractVMSupport {
                         else {
                             try { Thread.sleep(15000L); }
                             catch( InterruptedException ignore ) { /* ignore */ }
-                            vm = getVirtualMachine(service, serverId);
+                            vm = getVirtualMachine(instance, serverId);
                             if( vm != null ) {
                                 vm.destroy_Task();
                             }

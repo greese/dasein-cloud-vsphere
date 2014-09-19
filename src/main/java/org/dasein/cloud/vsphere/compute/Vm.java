@@ -1789,7 +1789,6 @@ public class Vm extends AbstractVMSupport {
             else {
                 server.setProviderMachineImageId(getContext().getAccountNumber() + "-unknown");
             }
-            server.setProviderRegionId(getContext().getRegionId());
             String dc = getDataCenter(vm);
 
             if( dc == null ) {
@@ -1798,9 +1797,15 @@ public class Vm extends AbstractVMSupport {
             DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dc);
             if (ourDC != null) {
                 server.setProviderDataCenterId(dc);
+                server.setProviderRegionId(ourDC.getRegionId());
+            }
+            else if ( dc.equals(getContext().getRegionId()) ) {
+                // env doesn't have clusters?
+                server.setProviderDataCenterId(dc+"-a");
+                server.setProviderRegionId(dc);
             }
             else {
-                server.setProviderDataCenterId(dc+"-a");
+                return null;
             }
 
             try {

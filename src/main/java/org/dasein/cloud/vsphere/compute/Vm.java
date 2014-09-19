@@ -45,13 +45,18 @@ import com.vmware.vim25.ManagedEntityStatus;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInProgress;
+import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
+import com.vmware.vim25.VirtualDeviceConfigSpecFileOperation;
 import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
 import com.vmware.vim25.VirtualDeviceConnectInfo;
+import com.vmware.vim25.VirtualDisk;
+import com.vmware.vim25.VirtualDiskFlatVer2BackingInfo;
 import com.vmware.vim25.VirtualE1000;
 import com.vmware.vim25.VirtualEthernetCard;
 import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
 import com.vmware.vim25.VirtualHardware;
+import com.vmware.vim25.VirtualLsiLogicSASController;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigInfoDatastoreUrlPair;
@@ -61,6 +66,8 @@ import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineRuntimeInfo;
+import com.vmware.vim25.VirtualSCSIController;
+import com.vmware.vim25.VirtualSCSISharing;
 import com.vmware.vim25.mo.ComputeResource;
 import com.vmware.vim25.mo.Datacenter;
 import com.vmware.vim25.mo.Datastore;
@@ -73,6 +80,7 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import org.dasein.util.CalendarWrapper;
 import org.dasein.util.uom.storage.Gigabyte;
+import org.dasein.util.uom.storage.Kilobyte;
 import org.dasein.util.uom.storage.Megabyte;
 import org.dasein.util.uom.storage.Storage;
 import org.dasein.util.uom.time.Minute;
@@ -233,34 +241,117 @@ public class Vm extends AbstractVMSupport {
             VirtualMachine virtualMachine = toServer(vm, "");
 
             if( vm != null ) {
-                if (options.getProviderProductId() != null) {
+                if (options.getProviderProductId() != null || options.getVolumes() != null) {
+                    boolean productChange = false;
+                    boolean volumeChange = false;
+
+                    //server product change
                     String productStr = options.getProviderProductId();
-                    String[] items = productStr.split(":");
-                    String resourcePoolId;
-                    int cpuCount;
-                    long memory;
-                    if (items.length == 3) {
-                        resourcePoolId = items[0];
-                        cpuCount = Integer.parseInt(items[1]);
-                        memory = Long.parseLong(items[2]);
-                        if (!resourcePoolId.equals(virtualMachine.getResourcePoolId())) {
-                            throw new CloudException("Unable to change resource pool when altering product size. Existing "+virtualMachine.getResourcePoolId()+", new "+resourcePoolId);
+                    int cpuCount=0;
+                    long memory=0;
+                    if (productStr != null && !productStr.equals("")) {
+                        productChange = true;
+                        String[] items = productStr.split(":");
+                        String resourcePoolId;
+
+                        if (items.length == 3) {
+                            resourcePoolId = items[0];
+                            cpuCount = Integer.parseInt(items[1]);
+                            memory = Long.parseLong(items[2]);
+                            if (!resourcePoolId.equals(virtualMachine.getResourcePoolId())) {
+                                throw new CloudException("Unable to change resource pool when altering product size. Existing "+virtualMachine.getResourcePoolId()+", new "+resourcePoolId);
+                            }
+                        }
+                        else if (items.length == 2 ){
+                            cpuCount = Integer.parseInt(items[0]);
+                            memory = Long.parseLong(items[1]);
+                        }
+                        else {
+                            throw new CloudException("Unable to parse product string "+productStr);
                         }
                     }
-                    else if (items.length == 2 ){
-                        cpuCount = Integer.parseInt(items[0]);
-                        memory = Long.parseLong(items[1]);
-                    }
-                    else {
-                        throw new CloudException("Unable to parse product string "+productStr);
-                    }
-
-                    VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
-                    spec.setMemoryMB(memory);
-                    spec.setNumCPUs(cpuCount);
 
                     try {
-                        CloudException lastError = null;
+                        //volumes change
+                        VolumeCreateOptions[] vco = options.getVolumes();
+                        VirtualDeviceConfigSpec[] machineSpecs = null;
+                        if (vco != null && vco.length > 0) {
+                            volumeChange = true;
+
+                            VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
+                            int cKey = 1000;
+                            boolean scsiExists = false;
+                            int numDisks = 0;
+                            for (VirtualDevice device : devices) {
+                                if (device instanceof VirtualSCSIController) {
+                                    if (!scsiExists) {
+                                        cKey = device.getKey();
+                                        scsiExists = true;
+                                    }
+                                }
+                                else if (device instanceof VirtualDisk) {
+                                    numDisks++;
+                                }
+                            }
+
+                            if (!scsiExists) {
+                                machineSpecs = new VirtualDeviceConfigSpec[vco.length + 1];
+                                VirtualDeviceConfigSpec scsiSpec =
+                                        new VirtualDeviceConfigSpec();
+                                scsiSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+                                VirtualLsiLogicSASController scsiCtrl =
+                                        new VirtualLsiLogicSASController();
+                                scsiCtrl.setKey(cKey);
+                                scsiCtrl.setBusNumber(0);
+                                scsiCtrl.setSharedBus(VirtualSCSISharing.noSharing);
+                                scsiSpec.setDevice(scsiCtrl);
+                                machineSpecs[0] = scsiSpec;
+                            } else {
+                                machineSpecs = new VirtualDeviceConfigSpec[vco.length];
+                            }
+                            // Associate the virtual disks with the scsi controller
+                            for (int i = 0; i < vco.length; i++) {
+
+                                VirtualDisk disk = new VirtualDisk();
+
+                                disk.controllerKey = cKey;
+                                disk.unitNumber = numDisks;
+                                Storage<Gigabyte> diskGB = vco[i].getVolumeSize();
+                                Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE));
+                                disk.capacityInKB = diskByte.longValue();
+
+                                VirtualDeviceConfigSpec diskSpec =
+                                        new VirtualDeviceConfigSpec();
+                                diskSpec.operation = VirtualDeviceConfigSpecOperation.add;
+                                diskSpec.fileOperation = VirtualDeviceConfigSpecFileOperation.create;
+                                diskSpec.device = disk;
+
+                                VirtualDiskFlatVer2BackingInfo diskFileBacking = new VirtualDiskFlatVer2BackingInfo();
+                                String fileName2 = "[" + vm.getDatastores()[0].getName() + "]" + vm.getName() + "/" + vco[i].getName();
+                                diskFileBacking.fileName = fileName2;
+                                diskFileBacking.diskMode = "persistent";
+                                diskFileBacking.thinProvisioned = true;
+                                disk.backing = diskFileBacking;
+
+                                if (!scsiExists) {
+                                    machineSpecs[i+1] = diskSpec;
+                                }
+                                else {
+                                    machineSpecs[i] = diskSpec;
+                                }
+                            }
+                        }
+
+                        VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+                        if (productChange) {
+                            spec.setMemoryMB(memory);
+                            spec.setNumCPUs(cpuCount);
+                        }
+                        if (volumeChange) {
+                            spec.setDeviceChange(machineSpecs);
+                        }
+
+                        CloudException lastError;
                         Task task = vm.reconfigVM_Task(spec);
 
                         String status = task.waitForTask();

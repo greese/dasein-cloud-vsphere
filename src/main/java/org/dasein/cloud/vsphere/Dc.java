@@ -461,6 +461,7 @@ public class Dc implements DataCenterServices {
                 Host hostSupport = provider.getComputeServices().getAffinityGroupSupport();
 
                 for (DataCenter dataCenter : listDataCenters(provider.getContext().getRegionId())) {
+                    boolean sameDC = false;
                     for (HostSystem host : hostSupport.listHostSystems(dataCenter.getProviderDataCenterId())) {
                         Iterable<Datastore> datastores = hostSupport.listDatastoresForHost(host);
                         for (Datastore ds: datastores) {
@@ -473,11 +474,14 @@ public class Dc implements DataCenterServices {
                                 for (StoragePool storagePool: pools) {
                                     if (storagePool.getStoragePoolName().equals(ds.getName())) {
                                         storagePool.setAffinityGroupId(null);
-                                        storagePool.setDataCenterId(null);
+                                        if (!sameDC) {
+                                            storagePool.setDataCenterId(null);
+                                        }
                                     }
                                 }
                             }
                         }
+                        sameDC = true;
                     }
                 }
                 cache.put(provider.getContext(), pools);

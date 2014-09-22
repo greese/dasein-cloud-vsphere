@@ -19,9 +19,11 @@
 package org.dasein.cloud.vsphere.compute;
 
 import org.dasein.cloud.compute.AbstractComputeServices;
+import org.dasein.cloud.compute.VolumeSupport;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 public class VMwareComputeServices extends AbstractComputeServices {
     private PrivateCloud cloud;
@@ -36,6 +38,12 @@ public class VMwareComputeServices extends AbstractComputeServices {
     @Override
     public @Nonnull Vm getVirtualMachineSupport() {
         return new Vm(cloud);
+    }
+
+    @Nullable
+    @Override
+    public HardDisk getVolumeSupport() {
+        return new HardDisk(cloud);
     }
 
     @Override

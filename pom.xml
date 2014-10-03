@@ -246,6 +246,10 @@
                     <value>${regionId}</value>
                 </property>
                 <property>
+                    <name>test.dataCenter</name>
+                    <value>${test.dataCenter}</value>
+                </property>
+                <property>
                     <name>insecure</name>
                     <value>${insecure}</value>
                 </property>

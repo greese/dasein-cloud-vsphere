@@ -49,7 +49,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
 
     @Override
     public boolean canAlter(@Nonnull VmState fromState) throws CloudException, InternalException {
-        return fromState.equals(VmState.STOPPED);
+        return true;
     }
 
     @Override

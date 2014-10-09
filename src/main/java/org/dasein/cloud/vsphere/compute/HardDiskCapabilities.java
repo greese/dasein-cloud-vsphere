@@ -32,12 +32,12 @@ public class HardDiskCapabilities extends AbstractCapabilities<PrivateCloud> imp
 
     @Override
     public boolean canAttach(VmState vmState) throws InternalException, CloudException {
-        return (vmState.equals(VmState.STOPPED));
+        return (vmState.equals(VmState.RUNNING));
     }
 
     @Override
     public boolean canDetach(VmState vmState) throws InternalException, CloudException {
-        return false;
+        return (vmState.equals(VmState.RUNNING));
     }
 
     @Override

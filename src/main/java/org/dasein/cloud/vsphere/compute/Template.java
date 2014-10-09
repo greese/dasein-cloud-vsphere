@@ -61,17 +61,14 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
-public class Template extends AbstractImageSupport {
+public class Template extends AbstractImageSupport<PrivateCloud> {
 
-    private PrivateCloud provider;
-    
     Template(@Nonnull PrivateCloud cloud) {
         super(cloud);
-        provider = cloud;
     }
 
     private @Nonnull ServiceInstance getServiceInstance() throws CloudException, InternalException {
-        ServiceInstance instance = provider.getServiceInstance();
+        ServiceInstance instance = getProvider().getServiceInstance();
 
         if( instance == null ) {
             throw new CloudException(CloudErrorType.AUTHENTICATION, HttpServletResponse.SC_UNAUTHORIZED, null, "Unauthorized");
@@ -81,11 +78,11 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public void remove(@Nonnull String providerImageId, boolean checkState) throws CloudException, InternalException {
-        APITrace.begin(provider, "Image.remove");
+        APITrace.begin(getProvider(), "Image.remove");
         try {
             ServiceInstance instance = getServiceInstance();
 
-            Folder folder = provider.getVmFolder(instance);
+            Folder folder = getProvider().getVmFolder(instance);
             ManagedEntity[] mes;
 
             try {
@@ -132,14 +129,14 @@ public class Template extends AbstractImageSupport {
     @Override
     public ImageCapabilities getCapabilities() throws CloudException, InternalException {
         if( capabilities == null ) {
-            capabilities = new TemplateCapabilities(provider);
+            capabilities = new TemplateCapabilities(getProvider());
         }
         return capabilities;
     }
 
     @Override
     public MachineImage getImage(@Nonnull String providerImageId) throws CloudException, InternalException {
-        APITrace.begin(provider, "Image.getImage");
+        APITrace.begin(getProvider(), "Image.getImage");
         try {
             for( ImageClass cls : getCapabilities().listSupportedImageClasses() ) {
                 for( MachineImage image : listImages(ImageFilterOptions.getInstance(cls)) ) {
@@ -189,7 +186,7 @@ public class Template extends AbstractImageSupport {
                 arch = (vminfo.getGuestId().contains("64") ? Architecture.I32 : Architecture.I64);
             }
             else {
-                arch = (provider.getComputeServices().getVirtualMachineSupport().getArchitecture(os));
+                arch = (getProvider().getComputeServices().getVirtualMachineSupport().getArchitecture(os));
             }
             description = (template.getName());
             name = (template.getName());
@@ -198,7 +195,7 @@ public class Template extends AbstractImageSupport {
             ManagedEntity parent = template.getParent();
             while (parent != null) {
                 if (parent instanceof Datacenter) {
-                    Region r = provider.getDataCenterServices().getRegion(parent.getName());
+                    Region r = getProvider().getDataCenterServices().getRegion(parent.getName());
                     regionId = r.getProviderRegionId();
                     break;
                 }
@@ -228,7 +225,7 @@ public class Template extends AbstractImageSupport {
 
     @Override
     protected MachineImage capture(@Nonnull ImageCreateOptions options, @Nullable AsynchronousTask<MachineImage> task) throws CloudException, InternalException {
-        APITrace.begin(provider, "Image.capture");
+        APITrace.begin(getProvider(), "Image.capture");
         try {
             String vmId = options.getVirtualMachineId();
 
@@ -237,12 +234,12 @@ public class Template extends AbstractImageSupport {
             }
             ServiceInstance service = getServiceInstance();
 
-            com.vmware.vim25.mo.VirtualMachine vm = provider.getComputeServices().getVirtualMachineSupport().getVirtualMachine(service, vmId);
+            com.vmware.vim25.mo.VirtualMachine vm = getProvider().getComputeServices().getVirtualMachineSupport().getVirtualMachine(service, vmId);
 
             if( vm == null ) {
                 throw new CloudException("No such virtual machine for imaging: " + vmId);
             }
-            MachineImage img = toMachineImage(provider.getComputeServices().getVirtualMachineSupport().clone(service, vm, options.getName(), true));
+            MachineImage img = toMachineImage(getProvider().getComputeServices().getVirtualMachineSupport().clone(service, vm, options.getName(), true));
 
             if( img == null ) {
                 throw new CloudException("Failed to identify newly created template");
@@ -274,7 +271,7 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<ResourceStatus> listImageStatus(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        APITrace.begin(provider, "Image.listImageStatus");
+        APITrace.begin(getProvider(), "Image.listImageStatus");
         try {
             ArrayList<ResourceStatus> status = new ArrayList<ResourceStatus>();
 
@@ -290,12 +287,12 @@ public class Template extends AbstractImageSupport {
 
     @Override
     public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
-        APITrace.begin(provider, "Image.listImages");
+        APITrace.begin(getProvider(), "Image.listImages");
         try {
             ArrayList<MachineImage> machineImages = new ArrayList<MachineImage>();
             ServiceInstance instance = getServiceInstance();
 
-            Folder folder = provider.getVmFolder(instance);
+            Folder folder = getProvider().getVmFolder(instance);
             ManagedEntity[] mes;
 
             try {
@@ -370,7 +367,7 @@ public class Template extends AbstractImageSupport {
         MachineImageState state = MachineImageState.ACTIVE;
         Platform platform;
 
-        arch = provider.getComputeServices().getVirtualMachineSupport().getArchitecture(osIdentifier);
+        arch = getProvider().getComputeServices().getVirtualMachineSupport().getArchitecture(osIdentifier);
         description = osIdentifier.name();
         name = getGuestOSNameMap().get(osIdentifier.name());
         if (name == null || name.equals("")) {
@@ -392,8 +389,8 @@ public class Template extends AbstractImageSupport {
 
     private @Nonnull
     Map<String, String> getGuestOSNameMap() {
-        Cache<Map> cache = Cache.getInstance(provider, "guestOS", Map.class, CacheLevel.CLOUD, new TimePeriod<Day>(1, TimePeriod.DAY));
-        Collection<Map> list = (ArrayList<Map>)cache.get(provider.getContext());
+        Cache<Map> cache = Cache.getInstance(getProvider(), "guestOS", Map.class, CacheLevel.CLOUD, new TimePeriod<Day>(1, TimePeriod.DAY));
+        Collection<Map> list = (ArrayList<Map>)cache.get(getProvider().getContext());
 
         if( list == null ) {
             list = new ArrayList();
@@ -512,7 +509,7 @@ public class Template extends AbstractImageSupport {
             osMap.put("winXPProGuest", "Windows XP Professional");
 
             list.add(osMap);
-            cache.put(provider.getContext(), list);
+            cache.put(getProvider().getContext(), list);
         }
         return list.iterator().next();
     }

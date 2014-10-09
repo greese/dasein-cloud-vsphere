@@ -90,17 +90,15 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
-public class Vm extends AbstractVMSupport {
+public class Vm extends AbstractVMSupport<PrivateCloud> {
     static private final Logger log = PrivateCloud.getLogger(Vm.class, "std");
-    private PrivateCloud provider;
-    
+
     Vm(@Nonnull PrivateCloud provider) {
         super(provider);
-        this.provider = provider;
     }
 
     private @Nonnull ServiceInstance getServiceInstance() throws CloudException, InternalException {
-        ServiceInstance instance = provider.getServiceInstance();
+        ServiceInstance instance = getProvider().getServiceInstance();
 
         if( instance == null ) {
             throw new CloudException(CloudErrorType.AUTHENTICATION, HttpServletResponse.SC_UNAUTHORIZED, null, "Unauthorized");
@@ -110,7 +108,7 @@ public class Vm extends AbstractVMSupport {
     
     @Override
     public void start(@Nonnull String serverId) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.start");
+        APITrace.begin(getProvider(), "Vm.start");
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -164,7 +162,7 @@ public class Vm extends AbstractVMSupport {
     }
 
     @Nonnull com.vmware.vim25.mo.VirtualMachine clone(@Nonnull ServiceInstance instance, @Nonnull com.vmware.vim25.mo.VirtualMachine vm, @Nonnull String name,  boolean asTemplate) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.clone(ServiceInstance, VirtualMachine)");
+        APITrace.begin(getProvider(), "Vm.clone(ServiceInstance, VirtualMachine)");
         try {
             try {
                 String dcId = getDataCenter(vm);
@@ -175,12 +173,12 @@ public class Vm extends AbstractVMSupport {
                 name = validateName(name);
 
                 Datacenter dc = null;
-                DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dcId);
+                DataCenter ourDC = getProvider().getDataCenterServices().getDataCenter(dcId);
                 if (ourDC != null) {
-                    dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
+                    dc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
                 }
                 else {
-                    dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dcId);
+                    dc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dcId);
                 }
                 ResourcePool pool = vm.getResourcePool();
 
@@ -414,7 +412,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public @Nonnull VirtualMachine clone(@Nonnull String serverId, @Nullable String intoDcId, @Nonnull String name, @Nonnull String description, boolean powerOn, @Nullable String ... firewallIds) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.clone");
+        APITrace.begin(getProvider(), "Vm.clone");
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -450,7 +448,7 @@ public class Vm extends AbstractVMSupport {
     @Override
     public VirtualMachineCapabilities getCapabilities() throws InternalException, CloudException {
         if( capabilities == null ) {
-            capabilities = new VMCapabilities(provider);
+            capabilities = new VMCapabilities(getProvider());
         }
         return capabilities;
     }
@@ -462,9 +460,9 @@ public class Vm extends AbstractVMSupport {
     private Random random = new Random();
     
     private @Nonnull VirtualMachine defineFromTemplate(@Nonnull VMLaunchOptions options) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.define");
+        APITrace.begin(getProvider(), "Vm.define");
         try {
-            ProviderContext ctx = provider.getContext();
+            ProviderContext ctx = getProvider().getContext();
 
             if( ctx == null ) {
                 throw new InternalException("No context was set for this request");
@@ -488,7 +486,7 @@ public class Vm extends AbstractVMSupport {
                     String rid = ctx.getRegionId();
 
                     if( rid != null ) {
-                        for( DataCenter dsdc : provider.getDataCenterServices().listDataCenters(rid) ) {
+                        for( DataCenter dsdc : getProvider().getDataCenterServices().listDataCenters(rid) ) {
                             dataCenterId = dsdc.getProviderDataCenterId();
                             if( random.nextInt()%3 == 0 ) {
                                 break;
@@ -501,23 +499,23 @@ public class Vm extends AbstractVMSupport {
                 Datacenter vdc = null;
 
                 if( dataCenterId != null ) {
-                    DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dataCenterId);
+                    DataCenter ourDC = getProvider().getDataCenterServices().getDataCenter(dataCenterId);
                     if (ourDC != null) {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
+                        vdc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
 
                         if( vdc == null ) {
                             throw new CloudException("Unable to identify VDC " + dataCenterId);
                         }
 
                         if (options.getResourcePoolId() == null) {
-                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(instance, dataCenterId);
+                            ResourcePool pool = getProvider().getDataCenterServices().getResourcePoolFromClusterId(instance, dataCenterId);
                             if( pool != null ) {
                                 pools = new ManagedEntity[] { pool };
                             }
                         }
                     }
                     else {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
+                        vdc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
                         if (options.getResourcePoolId() == null) {
                             pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
                         }
@@ -527,7 +525,7 @@ public class Vm extends AbstractVMSupport {
                 CloudException lastError = null;
 
                 if (options.getResourcePoolId() != null) {
-                    ResourcePool pool = provider.getDataCenterServices().getVMWareResourcePool(options.getResourcePoolId());
+                    ResourcePool pool = getProvider().getDataCenterServices().getVMWareResourcePool(options.getResourcePoolId());
                     if (pool != null) {
                         pools = new ManagedEntity[] {pool};
                     }
@@ -664,7 +662,7 @@ public class Vm extends AbstractVMSupport {
                     VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                     VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
                     if (options.getAffinityGroupId() != null) {
-                        Host agSupport= provider.getComputeServices().getAffinityGroupSupport();
+                        Host agSupport= getProvider().getComputeServices().getAffinityGroupSupport();
                         location.setHost(agSupport.getHostSystemForAffinity(options.getAffinityGroupId()).getConfig().getHost());
                     }
                     if (options.getStoragePoolId() != null) {
@@ -733,9 +731,9 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nonnull VirtualMachine defineFromScratch(@Nonnull VMLaunchOptions options) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.define");
+        APITrace.begin(getProvider(), "Vm.define");
         try {
-            ProviderContext ctx = provider.getContext();
+            ProviderContext ctx = getProvider().getContext();
 
             if( ctx == null ) {
                 throw new InternalException("No context was set for this request");
@@ -755,7 +753,7 @@ public class Vm extends AbstractVMSupport {
                     String rid = ctx.getRegionId();
 
                     if( rid != null ) {
-                        for( DataCenter dsdc : provider.getDataCenterServices().listDataCenters(rid) ) {
+                        for( DataCenter dsdc : getProvider().getDataCenterServices().listDataCenters(rid) ) {
                             dataCenterId = dsdc.getProviderDataCenterId();
                             if( random.nextInt()%3 == 0 ) {
                                 break;
@@ -768,23 +766,23 @@ public class Vm extends AbstractVMSupport {
                 Datacenter vdc = null;
 
                 if( dataCenterId != null ) {
-                    DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dataCenterId);
+                    DataCenter ourDC = getProvider().getDataCenterServices().getDataCenter(dataCenterId);
                     if (ourDC != null) {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
+                        vdc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ourDC.getRegionId());
 
                         if( vdc == null ) {
                             throw new CloudException("Unable to identify VDC " + dataCenterId);
                         }
 
                         if (options.getResourcePoolId() == null) {
-                            ResourcePool pool = provider.getDataCenterServices().getResourcePoolFromClusterId(instance, dataCenterId);
+                            ResourcePool pool = getProvider().getDataCenterServices().getResourcePoolFromClusterId(instance, dataCenterId);
                             if( pool != null ) {
                                 pools = new ManagedEntity[] { pool };
                             }
                         }
                     }
                     else {
-                        vdc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
+                        vdc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
                         if (options.getResourcePoolId() == null) {
                             pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
                         }
@@ -794,7 +792,7 @@ public class Vm extends AbstractVMSupport {
                 CloudException lastError = null;
 
                 if (options.getResourcePoolId() != null) {
-                    ResourcePool pool = provider.getDataCenterServices().getVMWareResourcePool(options.getResourcePoolId());
+                    ResourcePool pool = getProvider().getDataCenterServices().getVMWareResourcePool(options.getResourcePoolId());
                     if (pool != null) {
                         pools = new ManagedEntity[] {pool};
                     }
@@ -896,7 +894,7 @@ public class Vm extends AbstractVMSupport {
                     HostSystem host = null;
                     if (options.getAffinityGroupId() != null) {
 
-                        Host agSupport= provider.getComputeServices().getAffinityGroupSupport();
+                        Host agSupport= getProvider().getComputeServices().getAffinityGroupSupport();
                         host = agSupport.getHostSystemForAffinity(options.getAffinityGroupId());
                     }
 
@@ -956,7 +954,7 @@ public class Vm extends AbstractVMSupport {
     }
 
     @Nonnull HostSystem getBestHost(@Nonnull Datacenter forDatacenter, @Nonnull String clusterName) throws CloudException, RemoteException {
-        APITrace.begin(provider, "Vm.getBestHost");
+        APITrace.begin(getProvider(), "Vm.getBestHost");
         try {
             Collection<HostSystem> possibles = getPossibleHosts(forDatacenter, clusterName);
 
@@ -991,7 +989,7 @@ public class Vm extends AbstractVMSupport {
     }
 
     @Nonnull Collection<HostSystem> getPossibleHosts(@Nonnull Datacenter dc, @Nonnull String clusterName) throws CloudException, RemoteException {
-        APITrace.begin(provider, "Vm.getPossibleHosts");
+        APITrace.begin(getProvider(), "Vm.getPossibleHosts");
         try {
             ArrayList<HostSystem> possibles = new ArrayList<HostSystem>();
 
@@ -1019,7 +1017,7 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nullable String getDataCenter(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.getDataCenter");
+        APITrace.begin(getProvider(), "Vm.getDataCenter");
         try {
             try {
                 return vm.getResourcePool().getOwner().getName();
@@ -1039,12 +1037,12 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nullable HostSystem getHost(@Nonnull com.vmware.vim25.mo.VirtualMachine vm) throws InternalException, CloudException {
-        APITrace.begin(provider, "getHostForVM");
+        APITrace.begin(getProvider(), "getHostForVM");
         try {
             String dc = getDataCenter(vm);
             ManagedObjectReference vmHost = vm.getRuntime().getHost();
 
-            Host affinityGroupSupport = provider.getComputeServices().getAffinityGroupSupport();
+            Host affinityGroupSupport = getProvider().getComputeServices().getAffinityGroupSupport();
             Iterable<HostSystem> hostSystems = affinityGroupSupport.listHostSystems(dc);
             for (HostSystem host : hostSystems) {
                 if (vmHost.getVal().equals(host.getMOR().getVal())) {
@@ -1059,9 +1057,9 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nullable com.vmware.vim25.mo.VirtualMachine getTemplate(@Nonnull ServiceInstance instance, @Nonnull String templateId) throws CloudException, RemoteException, InternalException {
-        APITrace.begin(provider, "Vm.getTemplate");
+        APITrace.begin(getProvider(), "Vm.getTemplate");
         try {
-            Folder folder = provider.getVmFolder(instance);
+            Folder folder = getProvider().getVmFolder(instance);
             ManagedEntity[] mes;
 
             mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
@@ -1087,7 +1085,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public @Nullable VirtualMachineProduct getProduct(@Nonnull String productId) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.getProduct(String)");
+        APITrace.begin(getProvider(), "Vm.getProduct(String)");
         try {
             for( VirtualMachineProduct product : listProducts(null, Architecture.I64) ) {
                 if( product.getProviderProductId().equals(productId) ) {
@@ -1108,7 +1106,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public @Nullable VirtualMachine getVirtualMachine(@Nonnull String serverId) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.getVirtualMachine");
+        APITrace.begin(getProvider(), "Vm.getVirtualMachine");
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -1125,7 +1123,7 @@ public class Vm extends AbstractVMSupport {
     }
 
     private @Nonnull VirtualMachineProduct getProduct(@Nonnull VirtualHardware hardware) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.getProduct(VirtualHardware)");
+        APITrace.begin(getProvider(), "Vm.getProduct(VirtualHardware)");
         VirtualMachineProduct product = getProduct(hardware.getNumCPU() + ":" + hardware.getMemoryMB());
 
         if( product == null ) {
@@ -1145,19 +1143,19 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options, Architecture architecture) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.listProducts(VirtualMachineProductFilterOptions, Architecture)");
+        APITrace.begin(getProvider(), "Vm.listProducts(VirtualMachineProductFilterOptions, Architecture)");
         try {
             ArrayList<VirtualMachineProduct> allVirtualMachineProducts = new ArrayList<VirtualMachineProduct>();
 
-            Cache<org.dasein.cloud.dc.ResourcePool> cache = Cache.getInstance(provider, "resourcePools", org.dasein.cloud.dc.ResourcePool.class, CacheLevel.REGION_ACCOUNT, new TimePeriod<Minute>(15, TimePeriod.MINUTE));
+            Cache<org.dasein.cloud.dc.ResourcePool> cache = Cache.getInstance(getProvider(), "resourcePools", org.dasein.cloud.dc.ResourcePool.class, CacheLevel.REGION_ACCOUNT, new TimePeriod<Minute>(15, TimePeriod.MINUTE));
             Collection<org.dasein.cloud.dc.ResourcePool> rps = (Collection<org.dasein.cloud.dc.ResourcePool>)cache.get(getContext());
 
             if( rps == null ) {
-                Collection<DataCenter> dcs = provider.getDataCenterServices().listDataCenters(getContext().getRegionId());
+                Collection<DataCenter> dcs = getProvider().getDataCenterServices().listDataCenters(getContext().getRegionId());
                 rps = new ArrayList<org.dasein.cloud.dc.ResourcePool>();
 
                 for (DataCenter dc : dcs) {
-                    Collection<org.dasein.cloud.dc.ResourcePool> pools = provider.getDataCenterServices().listResourcePools(dc.getProviderDataCenterId());
+                    Collection<org.dasein.cloud.dc.ResourcePool> pools = getProvider().getDataCenterServices().listResourcePools(dc.getProviderDataCenterId());
                     rps.addAll(pools);
                 }
                 cache.put(getContext(),rps);
@@ -1280,10 +1278,10 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public @Nonnull Iterable<ResourceStatus> listVirtualMachineStatus() throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.listVirtualMachineStatus");
+        APITrace.begin(getProvider(), "Vm.listVirtualMachineStatus");
         try {
             ServiceInstance instance = getServiceInstance();
-            Folder folder = provider.getVmFolder(instance);
+            Folder folder = getProvider().getVmFolder(instance);
 
             ArrayList<ResourceStatus> servers = new ArrayList<ResourceStatus>();
             ManagedEntity[] mes;
@@ -1318,9 +1316,9 @@ public class Vm extends AbstractVMSupport {
     }
 
     @Nullable com.vmware.vim25.mo.VirtualMachine getVirtualMachine(@Nonnull ServiceInstance instance, @Nonnull String vmId) throws CloudException, InternalException {
-        APITrace.begin(provider, "Vm.getVirtualMachine(ServiceInstance, String)");
+        APITrace.begin(getProvider(), "Vm.getVirtualMachine(ServiceInstance, String)");
         try {
-            Folder folder = provider.getVmFolder(instance);
+            Folder folder = getProvider().getVmFolder(instance);
             ManagedEntity[] mes;
 
             try {
@@ -1369,7 +1367,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public @Nonnull VirtualMachine launch(@Nonnull VMLaunchOptions withLaunchOptions) throws CloudException, InternalException {
-        APITrace.begin(provider, "Vm.launch");
+        APITrace.begin(getProvider(), "Vm.launch");
         try {
             ServiceInstance instance = getServiceInstance();
             VirtualMachine server;
@@ -1408,10 +1406,10 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public @Nonnull Collection<VirtualMachine> listVirtualMachines() throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.listVirtualMachines");
+        APITrace.begin(getProvider(), "Vm.listVirtualMachines");
         try {
             ServiceInstance instance = getServiceInstance();
-            Folder folder = provider.getVmFolder(instance);
+            Folder folder = getProvider().getVmFolder(instance);
 
             ArrayList<VirtualMachine> servers = new ArrayList<VirtualMachine>();
             ManagedEntity[] mes;
@@ -1452,7 +1450,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public void resume(@Nonnull String serverId) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.resume");
+        APITrace.begin(getProvider(), "Vm.resume");
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -1483,7 +1481,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public void stop(@Nonnull String vmId, boolean force) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.stop");
+        APITrace.begin(getProvider(), "Vm.stop");
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -1514,7 +1512,7 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public void suspend(@Nonnull String serverId) throws InternalException, CloudException {
-        APITrace.begin(provider, "Vm.suspend");
+        APITrace.begin(getProvider(), "Vm.suspend");
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -1545,18 +1543,18 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public void reboot(@Nonnull String serverId) throws CloudException, InternalException {
-        APITrace.begin(provider, "Vm.reboot");
+        APITrace.begin(getProvider(), "Vm.reboot");
         try {
             final String id = serverId;
 
-            provider.hold();
+            getProvider().hold();
             Thread t = new Thread() {
                 public void run() {
                     try {
                         powerOnAndOff(id);
                     }
                     finally {
-                        provider.release();
+                        getProvider().release();
                     }
                 }
             };
@@ -1571,10 +1569,10 @@ public class Vm extends AbstractVMSupport {
     }
 
     private void powerOnAndOff(@Nonnull String serverId) {
-        APITrace.begin(provider, "Vm.powerOnAndOff");
+        APITrace.begin(getProvider(), "Vm.powerOnAndOff");
         try {
             try {
-                ServiceInstance instance = provider.getServiceInstance();
+                ServiceInstance instance = getProvider().getServiceInstance();
 
                 com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, serverId);
                 HostSystem host = getHost(vm);
@@ -1613,11 +1611,11 @@ public class Vm extends AbstractVMSupport {
     public void terminate(@Nonnull String vmId, String explanation)throws InternalException, CloudException{
         final String id = vmId;
 
-        provider.hold();
+        getProvider().hold();
         Thread t = new Thread() {
             public void run() {
                 try { terminateVm(id); }
-                finally { provider.release(); }
+                finally { getProvider().release(); }
             }
         };
 
@@ -1627,7 +1625,7 @@ public class Vm extends AbstractVMSupport {
     }
 
     private void terminateVm(@Nonnull String serverId) {
-        APITrace.begin(provider, "Vm.terminateVm");
+        APITrace.begin(getProvider(), "Vm.terminateVm");
         try {
             try {
                 ServiceInstance instance = getServiceInstance();
@@ -1806,7 +1804,7 @@ public class Vm extends AbstractVMSupport {
             if( dc == null ) {
                 return null;
             }
-            DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dc);
+            DataCenter ourDC = getProvider().getDataCenterServices().getDataCenter(dc);
             if (ourDC != null) {
                 server.setProviderDataCenterId(dc);
                 server.setProviderRegionId(ourDC.getRegionId());
@@ -1823,7 +1821,7 @@ public class Vm extends AbstractVMSupport {
             try {
                 ResourcePool rp = vm.getResourcePool();
                 if (rp != null) {
-                    String id = provider.getDataCenterServices().getIdForResourcePool(rp);
+                    String id = getProvider().getDataCenterServices().getIdForResourcePool(rp);
                     server.setResourcePoolId(id);
                 }
             }
@@ -1913,6 +1911,6 @@ public class Vm extends AbstractVMSupport {
 
     @Override
     public boolean isSubscribed() throws CloudException, InternalException {
-        return (provider.getServiceInstance() != null);
+        return (getProvider().getServiceInstance() != null);
     }
 }

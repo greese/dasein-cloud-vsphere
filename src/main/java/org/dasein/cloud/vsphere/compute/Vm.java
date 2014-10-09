@@ -127,11 +127,21 @@ public class Vm extends AbstractVMSupport {
                         throw new CloudException("Could not identify a deployment data center.");
                     }
                     HostSystem host = getHost(vm);
+                    Task task = null;
                     if (host == null)  {
-                        vm.powerOnVM_Task(getBestHost(dc, datacenter));
+                        task = vm.powerOnVM_Task(getBestHost(dc, datacenter));
                     }
                     else {
-                        vm.powerOnVM_Task(host);
+                        task = vm.powerOnVM_Task(host);
+
+                    }
+                    String status = task.waitForTask();
+
+                    if( !status.equals(Task.SUCCESS) ) {
+                        if (task.getTaskInfo().getError().getLocalizedMessage().contains("lock the file")) {
+                            throw new CloudException("Failed to start VM: " + task.getTaskInfo().getError().getLocalizedMessage()+". This vm may be using a disk file already in use");
+                        }
+                        throw new CloudException("Failed to start VM: " + task.getTaskInfo().getError().getLocalizedMessage());
                     }
                 }
                 catch( TaskInProgress e ) {
@@ -145,6 +155,9 @@ public class Vm extends AbstractVMSupport {
                 }
                 catch( RemoteException e ) {
                     throw new CloudException(e);
+                }
+                catch( InterruptedException e ) {
+                    throw new InternalException(e);
                 }
             }
         }

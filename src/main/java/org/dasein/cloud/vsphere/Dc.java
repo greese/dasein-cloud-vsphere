@@ -287,15 +287,19 @@ public class Dc implements DataCenterServices {
             ArrayList<org.dasein.cloud.dc.ResourcePool> list = new ArrayList<org.dasein.cloud.dc.ResourcePool>();
             Iterable<ResourcePool> rps;
             DataCenter ourDC = provider.getDataCenterServices().getDataCenter(providerDataCenterId);
-            if (ourDC.getProviderDataCenterId().endsWith("-a")) {
-                rps = listResourcePoolsForDatacenter(ourDC.getRegionId());
-            }
-            else {
-                rps = listResourcePoolsForCluster(providerDataCenterId);
-            }
+            if (ourDC != null) {
+                if (ourDC.getProviderDataCenterId().endsWith("-a")) {
+                    rps = listResourcePoolsForDatacenter(ourDC.getRegionId());
+                }
+                else {
+                    rps = listResourcePoolsForCluster(providerDataCenterId);
+                }
 
-            for (ResourcePool rp : rps) {
-                list.add(toResourcePool(rp, providerDataCenterId));
+                if (rps != null) {
+                    for (ResourcePool rp : rps) {
+                        list.add(toResourcePool(rp, providerDataCenterId));
+                    }
+                }
             }
             return list;
         }
@@ -325,13 +329,15 @@ public class Dc implements DataCenterServices {
             try {
                 clusters = new InventoryNavigator(dc).searchManagedEntities("ClusterComputeResource");
 
-                for( ManagedEntity entity : clusters ) {
+                if (clusters != null) {
+                    for( ManagedEntity entity : clusters ) {
 
-                    ClusterComputeResource cluster = (ClusterComputeResource)entity;
-                    if (cluster.getName().equals(providerDataCenterId)) {
-                        ResourcePool root = cluster.getResourcePool();
-                        if (root.getResourcePools() != null && root.getResourcePools().length > 0) {
-                            getChildren(root.getResourcePools(), list);
+                        ClusterComputeResource cluster = (ClusterComputeResource)entity;
+                        if (cluster.getName().equals(providerDataCenterId)) {
+                            ResourcePool root = cluster.getResourcePool();
+                            if (root.getResourcePools() != null && root.getResourcePools().length > 0) {
+                                getChildren(root.getResourcePools(), list);
+                            }
                         }
                     }
                 }
@@ -407,9 +413,11 @@ public class Dc implements DataCenterServices {
                 throw new CloudException(e);
             }
             ArrayList<ResourcePool> list = new ArrayList<ResourcePool>();
-            for( ManagedEntity entity : pools ) {
-                ResourcePool rp = (ResourcePool)entity;
-                list.add(rp);
+            if (pools != null) {
+                for( ManagedEntity entity : pools ) {
+                    ResourcePool rp = (ResourcePool)entity;
+                    list.add(rp);
+                }
             }
 
             return list;
@@ -453,6 +461,7 @@ public class Dc implements DataCenterServices {
                 Host hostSupport = provider.getComputeServices().getAffinityGroupSupport();
 
                 for (DataCenter dataCenter : listDataCenters(provider.getContext().getRegionId())) {
+                    boolean sameDC = false;
                     for (HostSystem host : hostSupport.listHostSystems(dataCenter.getProviderDataCenterId())) {
                         Iterable<Datastore> datastores = hostSupport.listDatastoresForHost(host);
                         for (Datastore ds: datastores) {
@@ -465,11 +474,14 @@ public class Dc implements DataCenterServices {
                                 for (StoragePool storagePool: pools) {
                                     if (storagePool.getStoragePoolName().equals(ds.getName())) {
                                         storagePool.setAffinityGroupId(null);
-                                        storagePool.setDataCenterId(null);
+                                        if (!sameDC) {
+                                            storagePool.setDataCenterId(null);
+                                        }
                                     }
                                 }
                             }
                         }
+                        sameDC = true;
                     }
                 }
                 cache.put(provider.getContext(), pools);

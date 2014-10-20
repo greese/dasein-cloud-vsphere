@@ -256,11 +256,11 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
 
     @Override
     public boolean isImageSharedWithPublic(@Nonnull String machineImageId) throws CloudException, InternalException {
-        try {
+        /*try {
             VirtualMachineGuestOsIdentifier os = VirtualMachineGuestOsIdentifier.valueOf(machineImageId);
             return true;
         }
-        catch( IllegalArgumentException ignore ) {}
+        catch( IllegalArgumentException ignore ) {}   */
         return false;
     }
 
@@ -342,7 +342,8 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
     @Nonnull
     @Override
     public Iterable<MachineImage> searchPublicImages(@Nonnull ImageFilterOptions options) throws CloudException, InternalException {
-        List<MachineImage> list = new ArrayList<MachineImage>();
+        // commented out for now as this method does not allow you to launch a functioning vm (no operating system)
+        /*List<MachineImage> list = new ArrayList<MachineImage>();
         VirtualMachineGuestOsIdentifier[] osValues = VirtualMachineGuestOsIdentifier.values();
         for (VirtualMachineGuestOsIdentifier os : osValues) {
             if (!os.name().startsWith("other")) {
@@ -357,7 +358,8 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
                 }
             }
         }
-        return list;
+        return list;*/
+        return Collections.emptyList();
     }
 
     private @Nullable MachineImage toMachineImage(@Nonnull VirtualMachineGuestOsIdentifier osIdentifier) throws InternalException, CloudException {

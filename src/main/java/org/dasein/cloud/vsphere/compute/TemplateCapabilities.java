@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2012 enStratus Networks Inc
+ * Copyright (C) 2010-2014 Dell, Inc.
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -122,6 +122,6 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
 
     @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
-        return true;
+        return false;
     }
 }

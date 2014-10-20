@@ -175,8 +175,8 @@
                     <exclude>**/LICENSE-APACHE.txt</exclude>
                 </excludes>
                 <properties>
-                    <year>2010-2012</year>
-                    <copyrightHolder>enStratus Networks Inc</copyrightHolder>
+                    <year>2010-2014</year>
+                    <copyrightHolder>Dell, Inc.</copyrightHolder>
                 </properties>
             </configuration>
         </plugin>

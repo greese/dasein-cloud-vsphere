@@ -116,7 +116,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Nullable
     @Override
     public VMScalingCapabilities getVerticalScalingCapabilities() throws CloudException, InternalException {
-        return VMScalingCapabilities.getInstance(false,false,Requirement.REQUIRED,Requirement.REQUIRED).withSupportsProductSizeScaling(true);
+        return VMScalingCapabilities.getInstance(false,false,true);
     }
 
     @Nonnull

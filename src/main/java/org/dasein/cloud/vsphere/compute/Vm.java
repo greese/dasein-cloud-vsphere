@@ -212,122 +212,27 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
     }
 
     @Override
-    public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
+    public VirtualMachine alterVirtualMachineSize(@Nonnull String virtualMachineId, @Nullable String cpuCount, @Nullable String ramInMB) throws InternalException, CloudException {
         APITrace.begin(getProvider(), "Vm.alterVirtualMachine");
         try {
             ServiceInstance instance = getServiceInstance();
-            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, vmId);
-            VirtualMachine virtualMachine = toServer(vm, "");
+            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, virtualMachineId);
 
             if( vm != null ) {
-                if (options.getProviderProductId() != null || options.getVolumes() != null) {
-                    boolean productChange = false;
-                    boolean volumeChange = false;
+                if (cpuCount != null || ramInMB != null) {
 
-                    //server product change
-                    String productStr = options.getProviderProductId();
-                    int cpuCount=0;
-                    long memory=0;
-                    if (productStr != null && !productStr.equals("")) {
-                        productChange = true;
-                        String[] items = productStr.split(":");
-                        String resourcePoolId;
-
-                        if (items.length == 3) {
-                            resourcePoolId = items[0];
-                            cpuCount = Integer.parseInt(items[1]);
-                            memory = Long.parseLong(items[2]);
-                            if (!resourcePoolId.equals(virtualMachine.getResourcePoolId())) {
-                                throw new CloudException("Unable to change resource pool when altering product size. Existing "+virtualMachine.getResourcePoolId()+", new "+resourcePoolId);
-                            }
-                        }
-                        else if (items.length == 2 ){
-                            cpuCount = Integer.parseInt(items[0]);
-                            memory = Long.parseLong(items[1]);
-                        }
-                        else {
-                            throw new CloudException("Unable to parse product string "+productStr);
-                        }
-                    }
+                    int cpuCountVal;
+                    long memoryVal;
 
                     try {
-                        //volumes change
-                        VolumeCreateOptions[] vco = options.getVolumes();
-                        VirtualDeviceConfigSpec[] machineSpecs = null;
-                        if (vco != null && vco.length > 0) {
-                            volumeChange = true;
-
-                            VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
-                            int cKey = 1000;
-                            boolean scsiExists = false;
-                            int numDisks = 0;
-                            for (VirtualDevice device : devices) {
-                                if (device instanceof VirtualSCSIController) {
-                                    if (!scsiExists) {
-                                        cKey = device.getKey();
-                                        scsiExists = true;
-                                    }
-                                }
-                                else if (device instanceof VirtualDisk) {
-                                    numDisks++;
-                                }
-                            }
-
-                            if (!scsiExists) {
-                                machineSpecs = new VirtualDeviceConfigSpec[vco.length + 1];
-                                VirtualDeviceConfigSpec scsiSpec =
-                                        new VirtualDeviceConfigSpec();
-                                scsiSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
-                                VirtualLsiLogicSASController scsiCtrl =
-                                        new VirtualLsiLogicSASController();
-                                scsiCtrl.setKey(cKey);
-                                scsiCtrl.setBusNumber(0);
-                                scsiCtrl.setSharedBus(VirtualSCSISharing.noSharing);
-                                scsiSpec.setDevice(scsiCtrl);
-                                machineSpecs[0] = scsiSpec;
-                            } else {
-                                machineSpecs = new VirtualDeviceConfigSpec[vco.length];
-                            }
-                            // Associate the virtual disks with the scsi controller
-                            for (int i = 0; i < vco.length; i++) {
-
-                                VirtualDisk disk = new VirtualDisk();
-
-                                disk.controllerKey = cKey;
-                                disk.unitNumber = numDisks;
-                                Storage<Gigabyte> diskGB = vco[i].getVolumeSize();
-                                Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE));
-                                disk.capacityInKB = diskByte.longValue();
-
-                                VirtualDeviceConfigSpec diskSpec =
-                                        new VirtualDeviceConfigSpec();
-                                diskSpec.operation = VirtualDeviceConfigSpecOperation.add;
-                                diskSpec.fileOperation = VirtualDeviceConfigSpecFileOperation.create;
-                                diskSpec.device = disk;
-
-                                VirtualDiskFlatVer2BackingInfo diskFileBacking = new VirtualDiskFlatVer2BackingInfo();
-                                String fileName2 = "[" + vm.getDatastores()[0].getName() + "]" + vm.getName() + "/" + vco[i].getName();
-                                diskFileBacking.fileName = fileName2;
-                                diskFileBacking.diskMode = "persistent";
-                                diskFileBacking.thinProvisioned = true;
-                                disk.backing = diskFileBacking;
-
-                                if (!scsiExists) {
-                                    machineSpecs[i+1] = diskSpec;
-                                }
-                                else {
-                                    machineSpecs[i] = diskSpec;
-                                }
-                            }
-                        }
-
                         VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
-                        if (productChange) {
-                            spec.setMemoryMB(memory);
-                            spec.setNumCPUs(cpuCount);
+                        if (ramInMB != null) {
+                            memoryVal = Long.parseLong(ramInMB);
+                            spec.setMemoryMB(memoryVal);
                         }
-                        if (volumeChange) {
-                            spec.setDeviceChange(machineSpecs);
+                        if (cpuCount != null) {
+                            cpuCountVal = Integer.parseInt(cpuCount);
+                            spec.setNumCPUs(cpuCountVal);
                         }
 
                         CloudException lastError;
@@ -343,7 +248,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                 catch( InterruptedException ignore ) { }
 
                                 for( VirtualMachine s : listVirtualMachines() ) {
-                                    if( s.getProviderVirtualMachineId().equals(vmId) ) {
+                                    if( s.getProviderVirtualMachineId().equals(virtualMachineId) ) {
                                         return s;
                                     }
                                 }

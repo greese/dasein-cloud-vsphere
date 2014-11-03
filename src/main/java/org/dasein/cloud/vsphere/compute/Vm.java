@@ -21,6 +21,7 @@ package org.dasein.cloud.vsphere.compute;
 import java.rmi.RemoteException;
 import java.util.*;
 
+import com.vmware.vim25.*;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
 import org.dasein.cloud.InternalException;
@@ -36,38 +37,6 @@ import org.dasein.cloud.util.Cache;
 import org.dasein.cloud.util.CacheLevel;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
-import com.vmware.vim25.Description;
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.GuestNicInfo;
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.InvalidState;
-import com.vmware.vim25.ManagedEntityStatus;
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.TaskInProgress;
-import com.vmware.vim25.VirtualDevice;
-import com.vmware.vim25.VirtualDeviceConfigSpec;
-import com.vmware.vim25.VirtualDeviceConfigSpecFileOperation;
-import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
-import com.vmware.vim25.VirtualDeviceConnectInfo;
-import com.vmware.vim25.VirtualDisk;
-import com.vmware.vim25.VirtualDiskFlatVer2BackingInfo;
-import com.vmware.vim25.VirtualE1000;
-import com.vmware.vim25.VirtualEthernetCard;
-import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
-import com.vmware.vim25.VirtualHardware;
-import com.vmware.vim25.VirtualLsiLogicSASController;
-import com.vmware.vim25.VirtualMachineCloneSpec;
-import com.vmware.vim25.VirtualMachineConfigInfo;
-import com.vmware.vim25.VirtualMachineConfigInfoDatastoreUrlPair;
-import com.vmware.vim25.VirtualMachineConfigSpec;
-import com.vmware.vim25.VirtualMachineFileInfo;
-import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineRelocateSpec;
-import com.vmware.vim25.VirtualMachineRuntimeInfo;
-import com.vmware.vim25.VirtualSCSIController;
-import com.vmware.vim25.VirtualSCSISharing;
 import com.vmware.vim25.mo.ComputeResource;
 import com.vmware.vim25.mo.Datacenter;
 import com.vmware.vim25.mo.Datastore;
@@ -243,122 +212,27 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
     }
 
     @Override
-    public VirtualMachine alterVirtualMachine(@Nonnull String vmId, @Nonnull VMScalingOptions options) throws InternalException, CloudException {
+    public VirtualMachine alterVirtualMachineSize(@Nonnull String virtualMachineId, @Nullable String cpuCount, @Nullable String ramInMB) throws InternalException, CloudException {
         APITrace.begin(getProvider(), "Vm.alterVirtualMachine");
         try {
             ServiceInstance instance = getServiceInstance();
-            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, vmId);
-            VirtualMachine virtualMachine = toServer(vm, "");
+            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, virtualMachineId);
 
             if( vm != null ) {
-                if (options.getProviderProductId() != null || options.getVolumes() != null) {
-                    boolean productChange = false;
-                    boolean volumeChange = false;
+                if (cpuCount != null || ramInMB != null) {
 
-                    //server product change
-                    String productStr = options.getProviderProductId();
-                    int cpuCount=0;
-                    long memory=0;
-                    if (productStr != null && !productStr.equals("")) {
-                        productChange = true;
-                        String[] items = productStr.split(":");
-                        String resourcePoolId;
-
-                        if (items.length == 3) {
-                            resourcePoolId = items[0];
-                            cpuCount = Integer.parseInt(items[1]);
-                            memory = Long.parseLong(items[2]);
-                            if (!resourcePoolId.equals(virtualMachine.getResourcePoolId())) {
-                                throw new CloudException("Unable to change resource pool when altering product size. Existing "+virtualMachine.getResourcePoolId()+", new "+resourcePoolId);
-                            }
-                        }
-                        else if (items.length == 2 ){
-                            cpuCount = Integer.parseInt(items[0]);
-                            memory = Long.parseLong(items[1]);
-                        }
-                        else {
-                            throw new CloudException("Unable to parse product string "+productStr);
-                        }
-                    }
+                    int cpuCountVal;
+                    long memoryVal;
 
                     try {
-                        //volumes change
-                        VolumeCreateOptions[] vco = options.getVolumes();
-                        VirtualDeviceConfigSpec[] machineSpecs = null;
-                        if (vco != null && vco.length > 0) {
-                            volumeChange = true;
-
-                            VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
-                            int cKey = 1000;
-                            boolean scsiExists = false;
-                            int numDisks = 0;
-                            for (VirtualDevice device : devices) {
-                                if (device instanceof VirtualSCSIController) {
-                                    if (!scsiExists) {
-                                        cKey = device.getKey();
-                                        scsiExists = true;
-                                    }
-                                }
-                                else if (device instanceof VirtualDisk) {
-                                    numDisks++;
-                                }
-                            }
-
-                            if (!scsiExists) {
-                                machineSpecs = new VirtualDeviceConfigSpec[vco.length + 1];
-                                VirtualDeviceConfigSpec scsiSpec =
-                                        new VirtualDeviceConfigSpec();
-                                scsiSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
-                                VirtualLsiLogicSASController scsiCtrl =
-                                        new VirtualLsiLogicSASController();
-                                scsiCtrl.setKey(cKey);
-                                scsiCtrl.setBusNumber(0);
-                                scsiCtrl.setSharedBus(VirtualSCSISharing.noSharing);
-                                scsiSpec.setDevice(scsiCtrl);
-                                machineSpecs[0] = scsiSpec;
-                            } else {
-                                machineSpecs = new VirtualDeviceConfigSpec[vco.length];
-                            }
-                            // Associate the virtual disks with the scsi controller
-                            for (int i = 0; i < vco.length; i++) {
-
-                                VirtualDisk disk = new VirtualDisk();
-
-                                disk.controllerKey = cKey;
-                                disk.unitNumber = numDisks;
-                                Storage<Gigabyte> diskGB = vco[i].getVolumeSize();
-                                Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE));
-                                disk.capacityInKB = diskByte.longValue();
-
-                                VirtualDeviceConfigSpec diskSpec =
-                                        new VirtualDeviceConfigSpec();
-                                diskSpec.operation = VirtualDeviceConfigSpecOperation.add;
-                                diskSpec.fileOperation = VirtualDeviceConfigSpecFileOperation.create;
-                                diskSpec.device = disk;
-
-                                VirtualDiskFlatVer2BackingInfo diskFileBacking = new VirtualDiskFlatVer2BackingInfo();
-                                String fileName2 = "[" + vm.getDatastores()[0].getName() + "]" + vm.getName() + "/" + vco[i].getName();
-                                diskFileBacking.fileName = fileName2;
-                                diskFileBacking.diskMode = "persistent";
-                                diskFileBacking.thinProvisioned = true;
-                                disk.backing = diskFileBacking;
-
-                                if (!scsiExists) {
-                                    machineSpecs[i+1] = diskSpec;
-                                }
-                                else {
-                                    machineSpecs[i] = diskSpec;
-                                }
-                            }
-                        }
-
                         VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
-                        if (productChange) {
-                            spec.setMemoryMB(memory);
-                            spec.setNumCPUs(cpuCount);
+                        if (ramInMB != null) {
+                            memoryVal = Long.parseLong(ramInMB);
+                            spec.setMemoryMB(memoryVal);
                         }
-                        if (volumeChange) {
-                            spec.setDeviceChange(machineSpecs);
+                        if (cpuCount != null) {
+                            cpuCountVal = Integer.parseInt(cpuCount);
+                            spec.setNumCPUs(cpuCountVal);
                         }
 
                         CloudException lastError;
@@ -374,7 +248,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                 catch( InterruptedException ignore ) { }
 
                                 for( VirtualMachine s : listVirtualMachines() ) {
-                                    if( s.getProviderVirtualMachineId().equals(vmId) ) {
+                                    if( s.getProviderVirtualMachineId().equals(virtualMachineId) ) {
                                         return s;
                                     }
                                 }
@@ -565,12 +439,13 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     //networking section
                     //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
                     String vlan = options.getVlanId();
+                    int count = 0;
+                    int networkIndex = 0;
                     if (vlan != null) {
 
                         // we don't need to do network config if the selected network
                         // is part of the template config anyway
                         boolean changeRequired = true;
-                        int count = 0;
                         Integer[] keys = new Integer[count];
                         GuestNicInfo[] nics = template.getGuest().getNet();
                         if (nics != null) {
@@ -579,6 +454,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             for (int i = 0; i<count; i++) {
                                 if (nics[i].getNetwork().equals(vlan)) {
                                     changeRequired = false;
+                                    networkIndex = i;
                                     break;
                                 }
                                 else {
@@ -659,7 +535,6 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         // end networking section
                     }
 
-                    VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                     VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();
                     if (options.getAffinityGroupId() != null) {
                         Host agSupport= getProvider().getComputeServices().getAffinityGroupSupport();
@@ -676,13 +551,93 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             }
                         }
                     }
-
                     location.setPool(pool.getConfig().getEntity());
+
+                    boolean isCustomised = false;
+                    if (options.getPrivateIp() != null) {
+                        isCustomised = true;
+                    }
+                    CustomizationSpec customizationSpec = new CustomizationSpec();
+                    if (isCustomised) {
+                        String templatePlatform = template.getGuest().getGuestFullName();
+                        Platform platform = Platform.guess(templatePlatform);
+                        if (platform.isLinux()) {
+                            CustomizationLinuxPrep lPrep = new CustomizationLinuxPrep();
+                            lPrep.setDomain(options.getDnsDomain());
+                            lPrep.setHostName(new CustomizationVirtualMachineName());
+                            customizationSpec.setIdentity(lPrep);
+                        }
+                        else if (platform.isWindows()) {
+                            CustomizationSysprep sysprep = new CustomizationSysprep();
+
+                            CustomizationGuiUnattended guiCust = new CustomizationGuiUnattended();
+                            guiCust.setAutoLogon(false);
+                            guiCust.setAutoLogonCount(0);
+                            CustomizationPassword password = new CustomizationPassword();
+                            password.setPlainText(true);
+                            password.setValue(options.getBootstrapPassword());
+                            guiCust.setPassword(password);
+                            log.debug("Windows pass for "+hostName+": "+password.getValue());
+                            sysprep.setGuiUnattended(guiCust);
+
+                            CustomizationIdentification identification = new CustomizationIdentification();
+                            identification.setJoinWorkgroup(options.getWinWorkgroupName());
+                            sysprep.setIdentification(identification);
+
+                            CustomizationUserData userData = new CustomizationUserData();
+                            userData.setComputerName(new CustomizationVirtualMachineName());
+                            userData.setFullName(options.getWinOwnerName());
+                            userData.setOrgName(options.getWinOrgName());
+                            userData.setProductId(options.getWinProductSerialNum());
+                            sysprep.setUserData(userData);
+
+                            customizationSpec.setIdentity(sysprep);
+                        }
+                        else {
+                            log.error("Guest customisation could not take place as platform is not linux or windows: "+platform);
+                            isCustomised=false;
+                        }
+
+                        if (isCustomised) {
+                            CustomizationGlobalIPSettings globalIPSettings = new CustomizationGlobalIPSettings();
+                            globalIPSettings.setDnsServerList(options.getDnsServerList());
+                            globalIPSettings.setDnsSuffixList(options.getDnsSuffixList());
+                            customizationSpec.setGlobalIPSettings(globalIPSettings);
+
+                            List<CustomizationAdapterMapping> nicMappings = new ArrayList<CustomizationAdapterMapping>();
+                            for (int i = 0; i < count; i++) {
+                                CustomizationAdapterMapping adapterMap = new CustomizationAdapterMapping();
+                                if (i != networkIndex) {
+                                    CustomizationIPSettings adapter = new CustomizationIPSettings();
+                                    adapter.setDnsDomain(options.getDnsDomain());
+                                    adapter.setIp(new CustomizationDhcpIpGenerator());
+                                    adapterMap.setAdapter(adapter);
+                                }
+                                else {
+                                    CustomizationIPSettings adapter = new CustomizationIPSettings();
+                                    adapter.setDnsDomain(options.getDnsDomain());
+                                    adapter.setGateway(options.getGatewayList());
+                                    CustomizationFixedIp fixedIp = new CustomizationFixedIp();
+                                    fixedIp.setIpAddress(options.getPrivateIp());
+                                    adapter.setIp(fixedIp);
+                                    adapter.setSubnetMask("255.255.255.0");
+                                    adapterMap.setAdapter(adapter);
+                                }
+                                nicMappings.add(adapterMap);
+                            }
+                            CustomizationAdapterMapping[] nicSettingMap = nicMappings.toArray(new CustomizationAdapterMapping[nicMappings.size()]);
+                            customizationSpec.setNicSettingMap(nicSettingMap);
+                        }
+                    }
+
+                    VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                     spec.setLocation(location);
-                    spec.setPowerOn(false);
+                    spec.setPowerOn(true);
                     spec.setTemplate(false);
                     spec.setConfig(config);
-
+                    if (isCustomised) {
+                        spec.setCustomization(customizationSpec);
+                    }
 
                     Task task = template.cloneVM_Task(vmFolder, hostName, spec);
 
@@ -697,6 +652,9 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
 
                             for( VirtualMachine s : listVirtualMachines() ) {
                                 if( s.getName().equals(hostName) ) {
+                                    if (isCustomised && s.getPlatform().equals(Platform.WINDOWS)) {
+                                        s.setRootPassword(options.getBootstrapPassword());
+                                    }
                                     return s;
                                 }
                             }
@@ -1395,8 +1353,6 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
             else {
                 server = defineFromScratch(withLaunchOptions);
             }
-
-            start(server.getProviderVirtualMachineId());
             return server;
         }
         finally {
@@ -1545,23 +1501,31 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
     public void reboot(@Nonnull String serverId) throws CloudException, InternalException {
         APITrace.begin(getProvider(), "Vm.reboot");
         try {
-            final String id = serverId;
+            String id = serverId;
+            ServiceInstance instance = getProvider().getServiceInstance();
 
-            getProvider().hold();
-            Thread t = new Thread() {
-                public void run() {
-                    try {
-                        powerOnAndOff(id);
-                    }
-                    finally {
-                        getProvider().release();
-                    }
+            com.vmware.vim25.mo.VirtualMachine vm = getVirtualMachine(instance, id);
+            if (vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn)) {
+                try {
+                    vm.rebootGuest();
                 }
-            };
 
-            t.setName("Reboot " + serverId);
-            t.setDaemon(true);
-            t.start();
+                catch( TaskInProgress e ) {
+                    throw new CloudException(e);
+                }
+                catch( InvalidState e ) {
+                    throw new CloudException(e);
+                }
+                catch( RuntimeFault e ) {
+                    throw new InternalException(e);
+                }
+                catch( RemoteException e ) {
+                    throw new CloudException(e);
+                }
+            }
+            else {
+                throw new CloudException("Vm must be powered on before rebooting os");
+            }
         }
         finally {
             APITrace.end();
@@ -1766,25 +1730,12 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                 server.setAffinityGroupId(host.getName());
             }
 
-            GuestInfo guest = vm.getGuest();
-            String addr = guest.getIpAddress();
-
-            if( addr != null ) {
-                if( isPublicIpAddress(addr) ) {
-
-                    server.setPublicAddresses(new RawAddress(addr));
-                }
-                else {
-                    server.setPrivateAddresses(new RawAddress(addr));
-                }
-            }
-            if( guest.getHostName() != null ) {
-                server.setPrivateDnsAddress(guest.getHostName());
-            }
             server.setName(vm.getName());
             server.setPlatform(Platform.guess(vminfo.getGuestFullName()));
             server.setProviderVirtualMachineId(vm.getConfig().getInstanceUuid());
             server.setPersistent(true);
+            server.setImagable(true);
+            server.setClonable(true);
             server.setArchitecture(getArchitecture(os));
             if( description == null ) {
                 description = vm.getName();
@@ -1792,7 +1743,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
             server.setDescription(description);
             server.setProductId(getProduct(vminfo.getHardware()).getProviderProductId());
             String imageId = vminfo.getAnnotation();
-            
+
             if (imageId != null && imageId.length()>0 && !imageId.contains(" ")) {
                 server.setProviderMachineImageId(imageId);
             }
@@ -1835,31 +1786,53 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                 throw new CloudException(ex);
             }
 
-            GuestInfo guestInfo = vm.getGuest();
-            
-            if( guestInfo != null ) {
-                String ipAddress = guestInfo.getIpAddress();
-                
-                if( ipAddress != null ) {
-                    server.setPrivateAddresses(new RawAddress(guestInfo.getIpAddress()));
-                    server.setPrivateDnsAddress(guestInfo.getIpAddress());
+            GuestInfo guest = vm.getGuest();
+            if( guest != null ) {
+                if( guest.getHostName() != null ) {
+                    server.setPrivateDnsAddress(guest.getHostName());
                 }
-
-                GuestNicInfo[] nicInfoArray = guestInfo.getNet();
+                if (guest.getIpAddress() != null) {
+                    server.setProviderAssignedIpAddressId(guest.getIpAddress());
+                }
+                GuestNicInfo[] nicInfoArray = guest.getNet();
                 if (nicInfoArray != null && nicInfoArray.length>0) {
+                    List<RawAddress> pubIps = new ArrayList<RawAddress>();
+                    List<RawAddress> privIps = new ArrayList<RawAddress>();
                     for (GuestNicInfo nicInfo : nicInfoArray) {
                         String net = nicInfo.getNetwork();
                         if (net != null) {
-                            server.setProviderVlanId(net);
-                            break;
+                            if (server.getProviderVlanId() == null) {
+                                server.setProviderVlanId(net);
+                            }
+                        }
+                        String[] ipAddresses = nicInfo.getIpAddress();
+                        if (ipAddresses != null) {
+                            for (String ip : ipAddresses) {
+                                if( ip != null ) {
+                                    if( isPublicIpAddress(ip) ) {
+                                        pubIps.add(new RawAddress(ip));
+                                    }
+                                    else {
+                                        privIps.add(new RawAddress(ip));
+                                    }
+                                }
+                            }
+
                         }
                     }
+                    if (privIps != null && privIps.size() > 0) {
+                        RawAddress[] rawPriv = privIps.toArray(new RawAddress[privIps.size()]);
+                        server.setPrivateAddresses(rawPriv);
+                    }
+                    if (pubIps != null && pubIps.size() > 0) {
+                        RawAddress[] rawPub = pubIps.toArray(new RawAddress[pubIps.size()]);
+                        server.setPublicAddresses(rawPub);
+                    }
                 }
-
             }
 
             VirtualMachineRuntimeInfo runtime = vm.getRuntime();
-            
+
             if( runtime != null ) {
                 VirtualMachinePowerState state = runtime.getPowerState();
 
@@ -1873,10 +1846,11 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             break;
                         case poweredOn:
                             server.setCurrentState(VmState.RUNNING);
+                            server.setRebootable(true);
                             break;
                     }
                 }
-                Calendar suspend = runtime.getSuspendTime();                
+                Calendar suspend = runtime.getSuspendTime();
                 Calendar time = runtime.getBootTime();
 
                 if( suspend == null || suspend.getTimeInMillis() < 1L ) {
@@ -1902,7 +1876,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
     }
 
     private String validateName(String name) {
-        name = name.toLowerCase().replaceAll("_", "-");
+        name = name.toLowerCase().replaceAll("_", "-").replaceAll(" ", "");
         if( name.length() <= 30 ) {
             return name;
         }

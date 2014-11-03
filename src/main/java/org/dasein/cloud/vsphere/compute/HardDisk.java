@@ -28,7 +28,7 @@ import java.util.*;
  * Date: 03/09/2014
  * Time: 12:07
  */
-public class HardDisk extends AbstractVolumeSupport{
+public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
 
     private PrivateCloud provider;
     HardDisk(@Nonnull PrivateCloud provider) {
@@ -168,6 +168,146 @@ public class HardDisk extends AbstractVolumeSupport{
             catch (InterruptedException e) {
                 throw new CloudException(e);
             }
+        }
+        finally {
+            APITrace.end();
+        }
+    }
+
+    @Nonnull
+    @Override
+    public String createVolume(@Nonnull VolumeCreateOptions options) throws InternalException, CloudException {
+        APITrace.begin(getProvider(), "Vm.alterVirtualMachine");
+        try {
+            if (options.getProviderVirtualMachineId() == null) {
+                throw new CloudException("Volumes can only be created in the context of a vm for "+getProvider().getCloudName()+". ProviderVirtualMachineId cannot be null");
+            }
+            ServiceInstance instance = getServiceInstance();
+            Vm vmSupport = getProvider().getComputeServices().getVirtualMachineSupport();
+            com.vmware.vim25.mo.VirtualMachine vm = vmSupport.getVirtualMachine(instance, options.getProviderVirtualMachineId());
+
+            if( vm != null ) {
+                try {
+                    //volumes change
+                    VirtualDeviceConfigSpec[] machineSpecs = null;
+
+                    VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
+                    int cKey = 1000;
+                    boolean scsiExists = false;
+                    int numDisks = 0;
+                    List<String> diskNames = new ArrayList<String>();
+                    for (VirtualDevice device : devices) {
+                        if (device instanceof VirtualSCSIController) {
+                            if (!scsiExists) {
+                                cKey = device.getKey();
+                                scsiExists = true;
+                            }
+                        }
+                        else if (device instanceof VirtualDisk) {
+                            numDisks++;
+                            VirtualDisk vDisk = (VirtualDisk) device;
+                            VirtualDiskFlatVer2BackingInfo bkInfo = (VirtualDiskFlatVer2BackingInfo) vDisk.getBacking();
+                            diskNames.add(bkInfo.getFileName());
+                        }
+                    }
+
+                    if (!scsiExists) {
+                        machineSpecs = new VirtualDeviceConfigSpec[2];
+                        VirtualDeviceConfigSpec scsiSpec =
+                                new VirtualDeviceConfigSpec();
+                        scsiSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+                        VirtualLsiLogicSASController scsiCtrl =
+                                new VirtualLsiLogicSASController();
+                        scsiCtrl.setKey(cKey);
+                        scsiCtrl.setBusNumber(0);
+                        scsiCtrl.setSharedBus(VirtualSCSISharing.noSharing);
+                        scsiSpec.setDevice(scsiCtrl);
+                        machineSpecs[0] = scsiSpec;
+                    } else {
+                        machineSpecs = new VirtualDeviceConfigSpec[1];
+                    }
+                    // Associate the virtual disk with the scsi controller
+                    VirtualDisk disk = new VirtualDisk();
+
+                    disk.controllerKey = cKey;
+                    disk.unitNumber = numDisks;
+                    Storage<Gigabyte> diskGB = options.getVolumeSize();
+                    Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE));
+                    disk.capacityInKB = diskByte.longValue();
+
+                    VirtualDeviceConfigSpec diskSpec =
+                            new VirtualDeviceConfigSpec();
+                    diskSpec.operation = VirtualDeviceConfigSpecOperation.add;
+                    diskSpec.fileOperation = VirtualDeviceConfigSpecFileOperation.create;
+                    diskSpec.device = disk;
+
+                    VirtualDiskFlatVer2BackingInfo diskFileBacking = new VirtualDiskFlatVer2BackingInfo();
+                    String fileName2 = "[" + vm.getDatastores()[0].getName() + "]" + vm.getName() + "/" + options.getName();
+                    diskFileBacking.fileName = fileName2;
+                    diskFileBacking.diskMode = "persistent";
+                    diskFileBacking.thinProvisioned = true;
+                    disk.backing = diskFileBacking;
+
+                    if (!scsiExists) {
+                        machineSpecs[1] = diskSpec;
+                    }
+                    else {
+                        machineSpecs[0] = diskSpec;
+                    }
+
+                    VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+                    spec.setDeviceChange(machineSpecs);
+
+                    CloudException lastError;
+                    Task task = vm.reconfigVM_Task(spec);
+
+                    String status = task.waitForTask();
+
+                    if( status.equals(Task.SUCCESS) ) {
+                        long timeout = System.currentTimeMillis() + (CalendarWrapper.MINUTE * 20L);
+
+                        while( System.currentTimeMillis() < timeout ) {
+                            try { Thread.sleep(10000L); }
+                            catch( InterruptedException ignore ) { }
+
+                            vm = vmSupport.getVirtualMachine(instance, options.getProviderVirtualMachineId());
+                            devices = vm.getConfig().getHardware().getDevice();
+                            for (VirtualDevice device : devices) {
+                                if (device instanceof VirtualDisk) {
+                                    VirtualDisk vDisk = (VirtualDisk) device;
+                                    VirtualDiskFlatVer2BackingInfo bkInfo = (VirtualDiskFlatVer2BackingInfo) vDisk.getBacking();
+                                    String diskFileName = bkInfo.getFileName();
+                                    if (!diskNames.contains(diskFileName)) {
+                                        diskFileName = diskFileName.substring(diskFileName.lastIndexOf("/") + 1);
+                                        return diskFileName;
+                                    }
+                                }
+                            }
+                        }
+                        lastError = new CloudException("Unable to identify new volume.");
+                    }
+                    else {
+                        lastError = new CloudException("Failed to create volume: " + task.getTaskInfo().getError().getLocalizedMessage());
+                    }
+                    if( lastError != null ) {
+                        throw lastError;
+                    }
+                    throw new CloudException("No volume and no error");
+                }
+                catch( InvalidProperty e ) {
+                    throw new CloudException(e);
+                }
+                catch( RuntimeFault e ) {
+                    throw new InternalException(e);
+                }
+                catch( RemoteException e ) {
+                    throw new CloudException(e);
+                }
+                catch (InterruptedException e) {
+                    throw new CloudException(e);
+                }
+            }
+            return null;
         }
         finally {
             APITrace.end();

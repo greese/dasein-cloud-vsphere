@@ -121,6 +121,11 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     }
 
     @Override
+    public boolean supportsListingAllRegions() throws CloudException, InternalException {
+        return true;
+    }
+
+    @Override
     public boolean supportsPublicLibrary(@Nonnull ImageClass cls) throws CloudException, InternalException {
         return false;
     }

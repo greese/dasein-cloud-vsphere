@@ -285,6 +285,12 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
         }
     }
 
+    @Nonnull
+    @Override
+    public Iterable<MachineImage> listImagesAllRegions(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
+        return listImages(options);
+    }
+
     @Override
     public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
         APITrace.begin(getProvider(), "Image.listImages");

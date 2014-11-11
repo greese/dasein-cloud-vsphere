@@ -285,12 +285,6 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
         }
     }
 
-    @Nonnull
-    @Override
-    public Iterable<MachineImage> listImagesAllRegions(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
-        return listImages(options);
-    }
-
     @Override
     public @Nonnull Iterable<MachineImage> listImages(@Nullable ImageFilterOptions options) throws CloudException, InternalException {
         APITrace.begin(getProvider(), "Image.listImages");
@@ -331,7 +325,19 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
                             MachineImage image = toMachineImage(template);
 
                             if( image != null && (options == null || options.matches(image)) ) {
-                                machineImages.add(image);
+                                if (options!= null) {
+                                    if (options.getWithAllRegions()) {
+                                        machineImages.add(image);
+                                    }
+                                    else {
+                                        if (image.getProviderRegionId().equals(getContext().getRegionId())) {
+                                            machineImages.add(image);
+                                        }
+                                    }
+                                }
+                                else {
+                                    machineImages.add(image);
+                                }
                             }
                         }
                     }

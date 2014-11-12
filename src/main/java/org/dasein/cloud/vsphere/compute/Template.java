@@ -325,7 +325,19 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
                             MachineImage image = toMachineImage(template);
 
                             if( image != null && (options == null || options.matches(image)) ) {
-                                machineImages.add(image);
+                                if (options!= null) {
+                                    if (options.getWithAllRegions()) {
+                                        machineImages.add(image);
+                                    }
+                                    else {
+                                        if (image.getProviderRegionId().equals(getContext().getRegionId())) {
+                                            machineImages.add(image);
+                                        }
+                                    }
+                                }
+                                else {
+                                    machineImages.add(image);
+                                }
                             }
                         }
                     }

@@ -22,7 +22,7 @@
 
   <groupId>org.dasein</groupId>
   <artifactId>dasein-cloud-vsphere</artifactId>
-  <version>2015.01.1-SNAPSHOT</version>
+  <version>2014.11.1-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>dasein-cloud-vsphere</name>
@@ -63,7 +63,7 @@
     <dependency>
         <groupId>org.dasein</groupId>
         <artifactId>dasein-cloud-core</artifactId>
-        <version>2015.01.1-SNAPSHOT</version>
+        <version>2014.11.1</version>
         <scope>compile</scope>
     </dependency>
     <dependency>
@@ -110,7 +110,7 @@
       <dependency>
           <groupId>org.dasein</groupId>
           <artifactId>dasein-cloud-test</artifactId>
-          <version>2015.01.1-SNAPSHOT</version>
+          <version>2014.11.1</version>
           <scope>test</scope>
       </dependency>
       <dependency>
@@ -175,8 +175,8 @@
                     <exclude>**/LICENSE-APACHE.txt</exclude>
                 </excludes>
                 <properties>
-                    <year>2010-2012</year>
-                    <copyrightHolder>enStratus Networks Inc</copyrightHolder>
+                    <year>2010-2014</year>
+                    <copyrightHolder>Dell, Inc</copyrightHolder>
                 </properties>
             </configuration>
         </plugin>

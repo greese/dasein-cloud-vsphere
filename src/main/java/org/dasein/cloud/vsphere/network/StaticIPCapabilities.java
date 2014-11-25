@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc.
+ * Copyright (C) 2010-2014 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,6 +52,12 @@ public class StaticIPCapabilities extends AbstractCapabilities<PrivateCloud> imp
     @Nonnull
     @Override
     public Requirement identifyVlanForVlanIPRequirement() throws CloudException, InternalException {
+        return Requirement.NONE;
+    }
+
+    @Nonnull
+    @Override
+    public Requirement identifyVlanForIPRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
     }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc.
+ * Copyright (C) 2010-2014 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -111,6 +111,11 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     }
 
     @Override
+    public boolean supportsImageCopy() throws CloudException, InternalException {
+        return false;
+    }
+
+    @Override
     public boolean supportsImageSharing() throws CloudException, InternalException {
         return false;
     }
@@ -118,6 +123,11 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     @Override
     public boolean supportsImageSharingWithPublic() throws CloudException, InternalException {
         return false;
+    }
+
+    @Override
+    public boolean supportsListingAllRegions() throws CloudException, InternalException {
+        return true;
     }
 
     @Override

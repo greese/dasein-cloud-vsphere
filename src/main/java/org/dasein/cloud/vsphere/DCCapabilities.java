@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc.
+ * Copyright (C) 2010-2014 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,6 +55,11 @@ public class DCCapabilities extends AbstractCapabilities<PrivateCloud> implement
 
     @Override
     public boolean supportsStoragePools() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsFolders() {
         return true;
     }
 }

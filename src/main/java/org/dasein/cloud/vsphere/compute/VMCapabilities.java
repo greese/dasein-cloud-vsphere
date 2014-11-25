@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc.
+ * Copyright (C) 2010-2014 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,7 +64,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
 
     @Override
     public boolean canReboot(@Nonnull VmState fromState) throws CloudException, InternalException {
-        return true;
+        return fromState.equals(VmState.RUNNING);
     }
 
     @Override
@@ -116,7 +116,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Nullable
     @Override
     public VMScalingCapabilities getVerticalScalingCapabilities() throws CloudException, InternalException {
-        return VMScalingCapabilities.getInstance(false,true,Requirement.REQUIRED,Requirement.REQUIRED);
+        return VMScalingCapabilities.getInstance(false,false,true);
     }
 
     @Nonnull
@@ -168,7 +168,7 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Nonnull
     @Override
     public Requirement identifyStaticIPRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
+        return Requirement.OPTIONAL;
     }
 
     @Nonnull
@@ -201,6 +201,11 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     @Override
     public boolean isUserDataSupported() throws CloudException, InternalException {
         return false;
+    }
+
+    @Override
+    public boolean isUserDefinedPrivateIPSupported() throws CloudException, InternalException {
+        return true;
     }
 
     static private Collection<Architecture> architectures;@Nonnull

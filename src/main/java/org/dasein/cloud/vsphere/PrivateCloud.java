@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc.
+ * Copyright (C) 2010-2014 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,8 +46,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public class PrivateCloud extends AbstractCloud {
-
     private ServiceInstance instance = null;
+
     static private @Nonnull String getLastItem(@Nonnull String name) {
         int idx = name.lastIndexOf('.');
         
@@ -189,7 +189,7 @@ public class PrivateCloud extends AbstractCloud {
     public @Nullable ServiceInstance getServiceInstance() throws CloudException, InternalException {
         if (instance == null) {
             ProviderContext ctx = getContext();
-
+        
             if( ctx == null ) {
                 throw new CloudException("No context exists for this request");
             }

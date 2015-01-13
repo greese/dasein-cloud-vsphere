@@ -25,29 +25,27 @@ import org.dasein.cloud.vsphere.PrivateCloud;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-public class VMwareComputeServices extends AbstractComputeServices {
-    private PrivateCloud cloud;
-    
-    public VMwareComputeServices(@Nonnull PrivateCloud cloud) { this.cloud = cloud; }
+public class VMwareComputeServices extends AbstractComputeServices<PrivateCloud> {
+    public VMwareComputeServices(@Nonnull PrivateCloud cloud) { super(cloud); }
 
     @Override
     public @Nonnull Template getImageSupport() {
-        return new Template(cloud);
+        return new Template(getProvider());
     }
     
     @Override
     public @Nonnull Vm getVirtualMachineSupport() {
-        return new Vm(cloud);
+        return new Vm(getProvider());
     }
 
     @Nullable
     @Override
     public HardDisk getVolumeSupport() {
-        return new HardDisk(cloud);
+        return new HardDisk(getProvider());
     }
 
     @Override
     public @Nonnull Host getAffinityGroupSupport() {
-        return new Host(cloud);
+        return new Host(getProvider());
     }
 }

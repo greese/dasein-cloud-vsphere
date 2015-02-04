@@ -1236,13 +1236,9 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         for( org.dasein.cloud.dc.ResourcePool pool : rps ) {
                             product = new VirtualMachineProduct();
                             product.setCpuCount(cpu);
-<<<<<<< HEAD
                             product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
                             product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
-=======
-                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                            product.setName("Pool " + pool.getName() + "/" + cpu + " CPU/" + ram + " GB RAM");
->>>>>>> WIP: FB 6111
+
                             product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                             product.setProviderProductId(pool.getProvideResourcePoolId() + ":" + cpu + ":" + ram);
                             product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));

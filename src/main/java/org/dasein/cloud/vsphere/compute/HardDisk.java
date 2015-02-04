@@ -231,11 +231,9 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
 
                     if (!scsiExists) {
                         machineSpecs = new VirtualDeviceConfigSpec[2];
-                        VirtualDeviceConfigSpec scsiSpec =
-                                new VirtualDeviceConfigSpec();
+                        VirtualDeviceConfigSpec scsiSpec = new VirtualDeviceConfigSpec();
                         scsiSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
-                        VirtualLsiLogicSASController scsiCtrl =
-                                new VirtualLsiLogicSASController();
+                        VirtualLsiLogicSASController scsiCtrl = new VirtualLsiLogicSASController();
                         scsiCtrl.setKey(cKey);
                         scsiCtrl.setBusNumber(0);
                         scsiCtrl.setSharedBus(VirtualSCSISharing.noSharing);
@@ -250,20 +248,21 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
                     disk.controllerKey = cKey;
                     disk.unitNumber = numDisks;
                     Storage<Gigabyte> diskGB = options.getVolumeSize();
-                    Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE));
+                    //Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE)); //Proper conversion is not desired here
+                    Storage<Kilobyte> diskByte = new Storage<Kilobyte>((diskGB.intValue() * 1000), Storage.KILOBYTE);
                     disk.capacityInKB = diskByte.longValue();
 
-                    VirtualDeviceConfigSpec diskSpec =
-                            new VirtualDeviceConfigSpec();
+                    VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
                     diskSpec.operation = VirtualDeviceConfigSpecOperation.add;
                     diskSpec.fileOperation = VirtualDeviceConfigSpecFileOperation.create;
                     diskSpec.device = disk;
 
                     VirtualDiskFlatVer2BackingInfo diskFileBacking = new VirtualDiskFlatVer2BackingInfo();
                     String fileName2 = "[" + vm.getDatastores()[0].getName() + "]" + vm.getName() + "/" + options.getName();
-                    diskFileBacking.fileName = fileName2;
-                    diskFileBacking.diskMode = "persistent";
-                    diskFileBacking.thinProvisioned = true;
+                    diskFileBacking.setFileName(fileName2);
+                    diskFileBacking.setDiskMode("persistent");
+                    diskFileBacking.setThinProvisioned(false);
+                    diskFileBacking.setWriteThrough(false);
                     disk.backing = diskFileBacking;
 
                     if (!scsiExists) {

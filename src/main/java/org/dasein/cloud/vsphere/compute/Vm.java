@@ -1339,8 +1339,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     VirtualMachineProduct product = new VirtualMachineProduct();
 
                                     product.setCpuCount(cpu);
-                                    product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                    product.setName(cpu + " CPU/" + ram + " GB RAM");
+                                    product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                                    product.setName(cpu + " CPU/" + ram + " MB RAM");
                                     product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                     product.setProviderProductId(cpu + ":" + ram);
                                     product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1350,8 +1350,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     for (org.dasein.cloud.dc.ResourcePool pool : rps) {
                                         product = new VirtualMachineProduct();
                                         product.setCpuCount(cpu);
-                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
                                         product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                         product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
                                         product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1367,8 +1367,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     VirtualMachineProduct product = new VirtualMachineProduct();
 
                                     product.setCpuCount(cpu);
-                                    product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                    product.setName(cpu + " CPU/" + ram + " GB RAM");
+                                    product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                                    product.setName(cpu + " CPU/" + ram + " MB RAM");
                                     product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                     product.setProviderProductId(cpu + ":" + ram);
                                     product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1378,8 +1378,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     for (org.dasein.cloud.dc.ResourcePool pool : rps) {
                                         product = new VirtualMachineProduct();
                                         product.setCpuCount(cpu);
-                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
                                         product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                         product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
                                         product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1398,8 +1398,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         VirtualMachineProduct product = new VirtualMachineProduct();
 
                         product.setCpuCount(cpu);
-                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                        product.setName(cpu + " CPU/" + ram + " GB RAM");
+                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                        product.setName(cpu + " CPU/" + ram + " MB RAM");
                         product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                         product.setProviderProductId(cpu + ":" + ram);
                         product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1409,8 +1409,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         for (org.dasein.cloud.dc.ResourcePool pool : rps) {
                             product = new VirtualMachineProduct();
                             product.setCpuCount(cpu);
-                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                            product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " GB RAM");
+                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                            product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
                             product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                             product.setProviderProductId(pool.getProvideResourcePoolId()+":"+cpu + ":" + ram);
                             product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));

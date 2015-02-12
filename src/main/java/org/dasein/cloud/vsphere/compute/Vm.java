@@ -563,7 +563,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     CustomizationSpec customizationSpec = new CustomizationSpec();
                     if (isCustomised) {
                         String templatePlatform = template.getGuest().getGuestFullName();
-                        Platform platform = Platform.guess(templatePlatform);
+                        if(templatePlatform == null) templatePlatform = template.getName();
+                        Platform platform = Platform.guess(templatePlatform.toLowerCase());
                         if (platform.isLinux()) {
                             CustomizationLinuxPrep lPrep = new CustomizationLinuxPrep();
                             lPrep.setDomain(options.getDnsDomain());
@@ -580,7 +581,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             password.setPlainText(true);
                             password.setValue(options.getBootstrapPassword());
                             guiCust.setPassword(password);
-                            log.debug("Windows pass for "+hostName+": "+password.getValue());
+                            //log.debug("Windows pass for "+hostName+": "+password.getValue());
                             sysprep.setGuiUnattended(guiCust);
 
                             CustomizationIdentification identification = new CustomizationIdentification();
@@ -1066,7 +1067,17 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     return product;
                 }
             }
-            return null;
+
+            //Product is non-standard so build a new one
+            String[] parts = productId.split(":");
+            VirtualMachineProduct product = new VirtualMachineProduct();
+            product.setCpuCount(Integer.parseInt(parts[0]));
+            product.setRamSize(new Storage<Megabyte>(Integer.parseInt(parts[1]), Storage.MEGABYTE));
+            product.setDescription("Custom product " + parts[0] + " CPU, " + parts[1] + " RAM");
+            product.setName(parts[0] + " CPU/" + parts[1] + " MB RAM");
+            product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
+            product.setProviderProductId(parts[0] + ":" + parts[1]);
+            return product;
         }
         finally {
             APITrace.end();

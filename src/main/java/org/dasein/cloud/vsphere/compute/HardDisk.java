@@ -247,10 +247,11 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
 
                     disk.controllerKey = cKey;
                     disk.unitNumber = numDisks;
-                    Storage<Gigabyte> diskGB = options.getVolumeSize();
+                    //Storage<Gigabyte> diskGB = options.getVolumeSize();
                     //Storage<Kilobyte> diskByte = (Storage<Kilobyte>) (diskGB.convertTo(Storage.KILOBYTE)); //Proper conversion is not desired here
-                    Storage<Kilobyte> diskByte = new Storage<Kilobyte>((diskGB.intValue() * 1000), Storage.KILOBYTE);
-                    disk.capacityInKB = diskByte.longValue();
+                    //Storage<Kilobyte> diskByte = new Storage<Kilobyte>((diskGB.intValue() * 1000), Storage.KILOBYTE);
+                    //disk.capacityInKB = diskByte.longValue();
+                    disk.setCapacityInKB(options.getVolumeSize().intValue() * 1000000);
 
                     VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
                     diskSpec.operation = VirtualDeviceConfigSpecOperation.add;

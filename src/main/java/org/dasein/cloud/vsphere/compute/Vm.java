@@ -32,6 +32,8 @@ import org.dasein.cloud.compute.*;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.identity.ServiceAction;
 import org.dasein.cloud.network.RawAddress;
+import org.dasein.cloud.network.VLAN;
+import org.dasein.cloud.network.VLANSupport;
 import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.util.Cache;
 import org.dasein.cloud.util.CacheLevel;
@@ -395,6 +397,9 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     }
                     else {
                         vdc = getProvider().getDataCenterServices().getVmwareDatacenterFromVDCId(instance, dataCenterId);
+                        if( vdc == null ) {
+                            throw new CloudException("Unable to identify VDC " + dataCenterId);
+                        }
                         if( options.getResourcePoolId() == null ) {
                             pools = new InventoryNavigator(vdc).searchManagedEntities("ResourcePool");
                         }
@@ -445,98 +450,91 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
                     String vlan = options.getVlanId();
                     int count = 0;
-                    int networkIndex = 0;
                     if( vlan != null ) {
 
                         // we don't need to do network config if the selected network
                         // is part of the template config anyway
+                        VLANSupport vlanSupport = getProvider().getNetworkServices().getVlanSupport();
+                        Iterable<VLAN> accessibleNetworks = vlanSupport.listVlans();
                         boolean changeRequired = true;
-                        Integer[] keys = new Integer[count];
+                        List<VirtualDeviceConfigSpec> machineSpecs = new ArrayList<VirtualDeviceConfigSpec>();
                         GuestNicInfo[] nics = template.getGuest().getNet();
                         if( nics != null ) {
-                            count = nics.length;
-                            keys = new Integer[count];
-                            for( int i = 0; i < count; i++ ) {
-                                if( nics[i].getNetwork().equals(vlan) ) {
+                            for( GuestNicInfo nic : nics ) {
+                                if( nic.getNetwork().equals(vlan) ) {
                                     changeRequired = false;
-                                    networkIndex = i;
-                                    break;
                                 }
                                 else {
-                                    keys[i] = nics[i].getDeviceConfigId();
+                                    for( VLAN accessibleNetwork : accessibleNetworks ) {
+                                        if( accessibleNetwork.getName().equals(nic.getNetwork()) ) {
+                                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+
+                                            VirtualEthernetCard newNic = new VirtualEthernetCard();
+                                            newNic.setKey(nic.getDeviceConfigId());
+
+                                            nicSpec.setDevice(newNic);
+                                            machineSpecs.add(nicSpec);
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
                         else {
-                            log.warn("Unable to find network adapter info for template " + template.getName() + "(" + template.getConfig().getInstanceUuid() + ")");
+                            log.warn("Template" + template.getName() + " (" + template.getConfig().getInstanceUuid() + ") doesn't have VMware tools installed, going through hardware");
+                            VirtualDevice[] virtualDevices = template.getConfig().getHardware().getDevice();
+                            for(VirtualDevice virtualDevice : virtualDevices) {
+                                if( virtualDevice instanceof VirtualEthernetCard ) {
+                                    VirtualEthernetCard veCard = ( VirtualEthernetCard ) virtualDevice;
+                                    if( veCard.getBacking() instanceof VirtualEthernetCardNetworkBackingInfo ) {
+                                        VirtualEthernetCardNetworkBackingInfo nicBacking = (VirtualEthernetCardNetworkBackingInfo) veCard.getBacking();
+                                        if( vlan.equals(nicBacking.getDeviceName()) ) {
+                                            changeRequired = false;
+                                        }
+                                        else {
+                                            for( VLAN accessibleNetwork : accessibleNetworks ) {
+                                                if( accessibleNetwork.getName().equals(nicBacking.getDeviceName()) ) {
+                                                    VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                                                    nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+
+                                                    nicSpec.setDevice(veCard);
+                                                    machineSpecs.add(nicSpec);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         if( changeRequired ) {
-                            if( count > 0 ) {
-                                VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[keys.length + 1];
-                                for( int j = 0; j < keys.length; j++ ) {
-                                    VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
-                                    nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
 
-                                    VirtualEthernetCard nic = new VirtualE1000();
-                                    nic.setKey(keys[j]);
+                            VirtualEthernetCard nic = new VirtualVmxnet3();
+                            nic.setConnectable(new VirtualDeviceConnectInfo());
+                            nic.connectable.connected = true;
+                            nic.connectable.startConnected = true;
 
-                                    nicSpec.setDevice(nic);
-                                    machineSpecs[j] = nicSpec;
-                                }
-                                VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
-                                nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
+                            Description info = new Description();
+                            info.setLabel(vlan);
+                            info.setSummary("Nic for network " + vlan);
 
-                                VirtualEthernetCard nic = new VirtualE1000();
-                                nic.setConnectable(new VirtualDeviceConnectInfo());
-                                nic.connectable.connected = true;
-                                nic.connectable.startConnected = true;
+                            VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                            nicBacking.setDeviceName(vlan);
 
-                                Description info = new Description();
-                                info.setLabel(vlan);
-                                info.setSummary("Nic for network " + vlan);
+                            nic.setAddressType("generated");
+                            nic.setBacking(nicBacking);
+                            nic.setKey(0);
 
-                                VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
-                                nicBacking.setDeviceName(vlan);
+                            nicSpec.setDevice(nic);
 
-                                nic.setAddressType("generated");
-                                nic.setBacking(nicBacking);
-                                nic.setKey(0);
+                            machineSpecs.add(nicSpec);
 
-                                nicSpec.setDevice(nic);
-
-                                machineSpecs[keys.length] = nicSpec;
-
-                                config.setDeviceChange(machineSpecs);
-                            }
-                            else {
-                                VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
-                                nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
-
-                                VirtualEthernetCard nic = new VirtualE1000();
-                                nic.setConnectable(new VirtualDeviceConnectInfo());
-                                nic.connectable.connected = true;
-                                nic.connectable.startConnected = true;
-
-                                Description info = new Description();
-                                info.setLabel(vlan);
-                                info.setSummary("Nic for network " + vlan);
-
-                                VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
-                                nicBacking.setDeviceName(vlan);
-
-                                nic.setAddressType("generated");
-                                nic.setBacking(nicBacking);
-                                nic.setKey(0);
-
-                                nicSpec.setDevice(nic);
-
-                                VirtualDeviceConfigSpec[] machineSpecs = new VirtualDeviceConfigSpec[1];
-                                machineSpecs[0] = nicSpec;
-
-                                config.setDeviceChange(machineSpecs);
-                            }
                         }
+                        config.setDeviceChange(machineSpecs.toArray(new VirtualDeviceConfigSpec[machineSpecs.size()]));
                         // end networking section
                     }
 
@@ -614,38 +612,25 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             globalIPSettings.setDnsSuffixList(options.getDnsSuffixList());
                             customizationSpec.setGlobalIPSettings(globalIPSettings);
 
-                            List<CustomizationAdapterMapping> nicMappings = new ArrayList<CustomizationAdapterMapping>();
-                            for( int i = 0; i < count; i++ ) {
-                                CustomizationAdapterMapping adapterMap = new CustomizationAdapterMapping();
-                                if( i != networkIndex ) {
-                                    CustomizationIPSettings adapter = new CustomizationIPSettings();
-                                    adapter.setDnsDomain(options.getDnsDomain());
-                                    adapter.setIp(new CustomizationDhcpIpGenerator());
-                                    adapterMap.setAdapter(adapter);
-                                }
-                                else {
-                                    CustomizationIPSettings adapter = new CustomizationIPSettings();
-                                    adapter.setDnsDomain(options.getDnsDomain());
-                                    adapter.setGateway(options.getGatewayList());
-                                    CustomizationFixedIp fixedIp = new CustomizationFixedIp();
-                                    fixedIp.setIpAddress(options.getPrivateIp());
-                                    log.debug("custom IP: " + options.getPrivateIp());
-                                    adapter.setIp(fixedIp);
-                                    if( options.getMetaData().containsKey("vSphereNetMaskNothingToSeeHere") ) {
-                                        String netmask = ( String ) options.getMetaData().get("vSphereNetMaskNothingToSeeHere");
-                                        adapter.setSubnetMask(netmask);
-                                        log.debug("custom subnet mask: " + netmask);
-                                    }
-                                    else {
-                                        adapter.setSubnetMask("255.255.252.0");
-                                        log.debug("default subnet mask");
-                                    }
-                                    adapterMap.setAdapter(adapter);
-                                }
-                                nicMappings.add(adapterMap);
+                            CustomizationAdapterMapping adapterMap = new CustomizationAdapterMapping();
+                            CustomizationIPSettings adapter = new CustomizationIPSettings();
+                            adapter.setDnsDomain(options.getDnsDomain());
+                            adapter.setGateway(options.getGatewayList());
+                            CustomizationFixedIp fixedIp = new CustomizationFixedIp();
+                            fixedIp.setIpAddress(options.getPrivateIp());
+                            adapter.setIp(fixedIp);
+                            if( options.getMetaData().containsKey("vSphereNetMaskNothingToSeeHere") ) {
+                                String netmask = ( String ) options.getMetaData().get("vSphereNetMaskNothingToSeeHere");
+                                adapter.setSubnetMask(netmask);
+                                log.debug("custom subnet mask: " + netmask);
                             }
-                            CustomizationAdapterMapping[] nicSettingMap = nicMappings.toArray(new CustomizationAdapterMapping[nicMappings.size()]);
-                            customizationSpec.setNicSettingMap(nicSettingMap);
+                            else {
+                                adapter.setSubnetMask("255.255.252.0");
+                                log.debug("default subnet mask");
+                            }
+
+                            adapterMap.setAdapter(adapter);
+                            customizationSpec.setNicSettingMap(Arrays.asList(adapterMap).toArray(new CustomizationAdapterMapping[1]));
                         }
                     }
 
@@ -842,7 +827,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
                         nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
 
-                        VirtualEthernetCard nic = new VirtualE1000();
+                        VirtualEthernetCard nic = new VirtualVmxnet3();
                         nic.setConnectable(new VirtualDeviceConnectInfo());
                         nic.connectable.connected = true;
                         nic.connectable.startConnected = true;

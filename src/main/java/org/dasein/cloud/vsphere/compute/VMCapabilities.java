@@ -30,10 +30,7 @@ import org.dasein.cloud.vsphere.PrivateCloud;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
+import java.util.*;
 
 /**
  * Describes the capabilities of VSphere with respect to Dasein virtual machine operations.
@@ -208,15 +205,14 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
         return true;
     }
 
-    static private Collection<Architecture> architectures;@Nonnull
-    @Override
-    public Iterable<Architecture> listSupportedArchitectures() throws InternalException, CloudException {
-        if( architectures == null ) {
-            ArrayList<Architecture> list = new ArrayList<Architecture>();
+    private transient volatile Collection<Architecture> architectures;
 
-            list.add(Architecture.I32);
-            list.add(Architecture.I64);
-            architectures = Collections.unmodifiableCollection(list);
+    @Override
+    public @Nonnull Iterable<Architecture> listSupportedArchitectures() throws InternalException, CloudException {
+        if( architectures == null ) {
+            architectures = Collections.unmodifiableCollection(
+                    Arrays.asList(Architecture.I64, Architecture.I32)
+            );
         }
         return architectures;
     }

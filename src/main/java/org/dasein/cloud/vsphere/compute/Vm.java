@@ -1077,6 +1077,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
             product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
             product.setProviderProductId(parts[0] + ":" + parts[1]);
             return product;
+
         }
         finally {
             APITrace.end();

@@ -254,9 +254,9 @@
                     <value>${insecure}</value>
                 </property>
             </systemProperties>
-          <includes>
-            <include>**/TestSuite.java</include>
-          </includes>
+          <excludes>
+            <exclude>**/TestSuite.java</exclude>
+          </excludes>
            <!-- <argLine>-Ddasein.inclusions=StatelessDCTests</argLine>     -->
         </configuration>
       </plugin>  

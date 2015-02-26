@@ -101,6 +101,7 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
             }
             if( mes == null ) {
                 log.warn("No templates found in inventory when removing image: "+providerImageId);
+                return;
             }
 
             for( ManagedEntity entity : mes ) {

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc
+ * Copyright (C) 2010-2015 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -571,6 +571,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         if(templatePlatform == null) templatePlatform = template.getName();
                         Platform platform = Platform.guess(templatePlatform.toLowerCase());
                         if (platform.isLinux()) {
+
                             CustomizationLinuxPrep lPrep = new CustomizationLinuxPrep();
                             lPrep.setDomain(options.getDnsDomain());
                             lPrep.setHostName(new CustomizationVirtualMachineName());
@@ -1078,6 +1079,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
             product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
             product.setProviderProductId(parts[0] + ":" + parts[1]);
             return product;
+
         }
         finally {
             APITrace.end();
@@ -1162,8 +1164,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     for( org.dasein.cloud.dc.ResourcePool pool : rps ) {
                                         product = new VirtualMachineProduct();
                                         product.setCpuCount(cpu);
-                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                        product.setName("Pool " + pool.getName() + "/" + cpu + " CPU/" + ram + " GB RAM");
+                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
                                         product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                         product.setProviderProductId(pool.getProvideResourcePoolId() + ":" + cpu + ":" + ram);
                                         product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1190,8 +1192,9 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     for( org.dasein.cloud.dc.ResourcePool pool : rps ) {
                                         product = new VirtualMachineProduct();
                                         product.setCpuCount(cpu);
-                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                                        product.setName("Pool " + pool.getName() + "/" + cpu + " CPU/" + ram + " GB RAM");
+                                        product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                                        product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
+
                                         product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                         product.setProviderProductId(pool.getProvideResourcePoolId() + ":" + cpu + ":" + ram);
                                         product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
@@ -1221,8 +1224,9 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         for( org.dasein.cloud.dc.ResourcePool pool : rps ) {
                             product = new VirtualMachineProduct();
                             product.setCpuCount(cpu);
-                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "GB RAM");
-                            product.setName("Pool " + pool.getName() + "/" + cpu + " CPU/" + ram + " GB RAM");
+                            product.setDescription("Custom product " + architecture + " - " + cpu + " CPU, " + ram + "MB RAM");
+                            product.setName("Pool "+pool.getName()+"/"+cpu + " CPU/" + ram + " MB RAM");
+
                             product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                             product.setProviderProductId(pool.getProvideResourcePoolId() + ":" + cpu + ":" + ram);
                             product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));

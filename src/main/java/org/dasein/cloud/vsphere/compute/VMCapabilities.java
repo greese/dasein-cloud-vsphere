@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc
+ * Copyright (C) 2010-2015 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -216,6 +216,15 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
         }
         return architectures;
     }
+
+    @Override
+    public boolean isVMProductDCConstrained() throws InternalException, CloudException {return false;}
+
+    @Override
+    public boolean supportsCloudStoredShellKey() throws InternalException, CloudException {return false;}
+
+    @Override
+    public boolean supportsClientRequestToken() throws InternalException, CloudException {return false;}
 
     @Override
     public boolean supportsSpotVirtualMachines() throws InternalException, CloudException {

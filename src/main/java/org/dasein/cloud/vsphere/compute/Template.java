@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010-2014 Dell, Inc
+ * Copyright (C) 2010-2015 Dell, Inc
  *
  * ====================================================================
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@ package org.dasein.cloud.vsphere.compute;
 import java.rmi.RemoteException;
 import java.util.*;
 
+import org.apache.log4j.Logger;
 import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
 import org.dasein.cloud.CloudException;
@@ -62,6 +63,7 @@ import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 
 public class Template extends AbstractImageSupport<PrivateCloud> {
+    static private final Logger log = PrivateCloud.getLogger(Template.class, "std");
 
     Template(@Nonnull PrivateCloud cloud) {
         super(cloud);
@@ -89,34 +91,39 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
                 mes = new InventoryNavigator(folder).searchManagedEntities("VirtualMachine");
             }
             catch( InvalidProperty e ) {
-                throw new CloudException("No virtual machine support in cluster: " + e.getMessage());
+                throw new CloudException("No virtual machine support in cluster: " + e.getMessage(), e);
             }
             catch( RuntimeFault e ) {
-                throw new CloudException("Error in processing request to cluster: " + e.getMessage());
+                throw new CloudException("Error in processing request to cluster: " + e.getMessage(), e);
             }
             catch( RemoteException e ) {
-                throw new CloudException("Error in cluster processing request: " + e.getMessage());
+                throw new CloudException("Error in cluster processing request: " + e.getMessage(), e);
+            }
+            if( mes == null ) {
+                log.warn("No templates found in inventory when removing image: "+providerImageId);
+                return;
             }
 
-            if( mes != null && mes.length > 0 ) {
-                for( ManagedEntity entity : mes ) {
-                    VirtualMachine template = (VirtualMachine)entity;
-                    if( template != null && template.getConfig().getUuid().equals(providerImageId)) {
-                        VirtualMachineConfigInfo cfg = null;
-
-                        try {
-                            cfg = template.getConfig();
-                            if( cfg != null && cfg.isTemplate() ) {
-                                template.destroy_Task();
-                            }
-                        }
-                        catch(RuntimeException e) {
-                            e.printStackTrace();
-                        }
-                        catch(RemoteException ex){
-                            throw new CloudException(ex);
-                        }
+            for( ManagedEntity entity : mes ) {
+                VirtualMachine template = ( VirtualMachine ) entity;
+                if( template == null ) {
+                    continue;
+                }
+                VirtualMachineConfigInfo cfg = template.getConfig();
+                if( cfg == null || !cfg.isTemplate() ) {
+                    continue;
+                }
+                if( providerImageId.equals(cfg.getUuid()) ) {
+                    try {
+                        template.destroy_Task();
                     }
+                    catch( RuntimeException e ) {
+                        throw new InternalException("Error while running a destroy task for image: "+providerImageId, e);
+                    }
+                    catch( RemoteException ex ) {
+                        throw new CloudException("Error while running a destroy task for image: "+providerImageId, ex);
+                    }
+                    break; // job's done, stop traversing
                 }
             }
         }

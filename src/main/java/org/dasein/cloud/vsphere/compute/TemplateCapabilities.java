@@ -101,6 +101,9 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     }
 
     @Override
+    public boolean imageCaptureDestroysVM() throws InternalException, CloudException {return false;}
+
+    @Override
     public boolean supportsDirectImageUpload() throws CloudException, InternalException {
         return false;
     }

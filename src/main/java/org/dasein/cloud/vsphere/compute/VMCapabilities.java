@@ -218,6 +218,15 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     }
 
     @Override
+    public boolean isVMProductDCConstrained() throws InternalException, CloudException {return false;}
+
+    @Override
+    public boolean supportsCloudStoredShellKey() throws InternalException, CloudException {return false;}
+
+    @Override
+    public boolean supportsClientRequestToken() throws InternalException, CloudException {return false;}
+
+    @Override
     public boolean supportsSpotVirtualMachines() throws InternalException, CloudException {
         return false;
     }

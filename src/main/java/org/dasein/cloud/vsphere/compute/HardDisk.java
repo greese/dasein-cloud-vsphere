@@ -507,7 +507,7 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
             //get .vmdk files
             Collection<StoragePool> pools = provider.getDataCenterServices().listStoragePools();
             Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ctx.getRegionId());
-
+            String name = dc.getName();
             for (Datastore ds : dc.getDatastores()) {
                 String dataCenterId = null;
                 for (StoragePool pool : pools) {

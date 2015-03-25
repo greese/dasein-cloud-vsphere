@@ -223,6 +223,11 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     }
 
     @Override
+    public boolean supportsClientRequestToken() throws InternalException, CloudException {
+        return false;
+    }
+
+    @Override
     public boolean supportsAlterVM() {
         return true;
     }

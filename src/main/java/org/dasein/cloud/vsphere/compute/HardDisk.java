@@ -464,9 +464,7 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
                 for( ManagedEntity entity : mes ) {
                     VirtualMachine vm = (VirtualMachine)entity;
                     Platform guestOs = Platform.guess(vm.getConfig().getGuestFullName());
-                    if (vm != null && vm.getConfig() != null
-                            && !vm.getConfig().isTemplate()
-                            && vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn)) {
+                    if (vm != null && !vm.getConfig().isTemplate() && (vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn) || vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOff))) {
                         String dc2;
                         try {
                             dc2 = vm.getResourcePool().getOwner().getName();
@@ -506,7 +504,7 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
             //get .vmdk files
             Collection<StoragePool> pools = provider.getDataCenterServices().listStoragePools();
             Datacenter dc = provider.getDataCenterServices().getVmwareDatacenterFromVDCId(instance, ctx.getRegionId());
-
+            String name = dc.getName();
             for (Datastore ds : dc.getDatastores()) {
                 String dataCenterId = null;
                 for (StoragePool pool : pools) {

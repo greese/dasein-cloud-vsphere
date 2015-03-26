@@ -464,7 +464,9 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
                 for( ManagedEntity entity : mes ) {
                     VirtualMachine vm = (VirtualMachine)entity;
                     Platform guestOs = Platform.guess(vm.getConfig().getGuestFullName());
-                    if (vm != null && !vm.getConfig().isTemplate() && vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn)) {
+                    if (vm != null && vm.getConfig() != null
+                            && !vm.getConfig().isTemplate()
+                            && vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn)) {
                         String dc2;
                         try {
                             dc2 = vm.getResourcePool().getOwner().getName();

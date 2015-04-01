@@ -168,6 +168,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                 config.setAnnotation(vm.getConfig().getAnnotation());
                 config.setMemoryMB(memory);
                 config.setNumCPUs(cpuCount);
+                config.setCpuHotAddEnabled(true);
+                config.setNumCoresPerSocket(cpuCount);
 
                 VirtualMachineCloneSpec spec = new VirtualMachineCloneSpec();
                 VirtualMachineRelocateSpec location = new VirtualMachineRelocateSpec();

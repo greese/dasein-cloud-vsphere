@@ -237,6 +237,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         if( cpuCount != null ) {
                             cpuCountVal = Integer.parseInt(cpuCount);
                             spec.setNumCPUs(cpuCountVal);
+                            spec.setCpuHotAddEnabled(true);
+                            spec.setNumCoresPerSocket(cpuCountVal);
                         }
 
                         CloudException lastError;
@@ -447,6 +449,9 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     config.setAnnotation(options.getMachineImageId());
                     config.setMemoryMB(memory);
                     config.setNumCPUs(cpuCount);
+                    config.setCpuHotAddEnabled(true);
+                    config.setNumCoresPerSocket(cpuCount);
+
 
                     //networking section
                     //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
@@ -466,7 +471,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                 if( nic.getNetwork().equals(vlan) ) {
                                     changeRequired = false;
                                 }
-                                else {
+                                else { // remove template nics for networks we have access to
                                     for( VLAN accessibleNetwork : accessibleNetworks ) {
                                         if( accessibleNetwork.getName().equals(nic.getNetwork()) ) {
                                             VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
@@ -796,6 +801,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     config.setAnnotation(imageId);
                     config.setMemoryMB(memory);
                     config.setNumCPUs(cpuCount);
+                    config.setCpuHotAddEnabled(true);
+                    config.setNumCoresPerSocket(cpuCount);
                     config.setGuestId(imageId);
 
                     // create vm file info for the vmx file

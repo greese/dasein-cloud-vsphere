@@ -161,7 +161,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
                                     dvsMap.put(dvs.getName(),dvs.getName());
                                     networkList.add(toVlan(dvs));
                                 }
-git                            }
+                            }
                         }
                     }
                     else {

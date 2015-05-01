@@ -463,41 +463,44 @@ public class HardDisk extends AbstractVolumeSupport<PrivateCloud>{
             if( mes != null && mes.length > 0 ) {
                 for( ManagedEntity entity : mes ) {
                     VirtualMachine vm = (VirtualMachine)entity;
-                    Platform guestOs = Platform.guess(vm.getConfig().getGuestFullName());
-                    if (vm != null && !vm.getConfig().isTemplate() && (vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn) || vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOff))) {
-                        String dc2;
-                        try {
-                            dc2 = vm.getResourcePool().getOwner().getName();
-                        }
-                        catch( RemoteException e ) {
-                            throw new CloudException(e);
-                        }
+                    if(vm != null && vm.getConfig() != null){
+                        Platform guestOs = Platform.guess(vm.getConfig().getGuestFullName());
+                        if (vm != null && !vm.getConfig().isTemplate() && (vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOn) || vm.getRuntime().getPowerState().equals(VirtualMachinePowerState.poweredOff))) {
+                            String dc2;
+                            try {
+                                dc2 = vm.getResourcePool().getOwner().getName();
+                            }
+                            catch( RemoteException e ) {
+                                throw new CloudException(e);
+                            }
 
-                        if( dc2 == null ) {
-                            return Collections.emptyList();
-                        }
-                        DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dc2);
-                        String regionId = "";
-                        if (ourDC == null) {
-                            dc2 = dc2+"-a";
-                            regionId = dc2;
-                        }
-                        else {
-                            regionId = ourDC.getRegionId();
-                        }
-                        VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
-                        for (VirtualDevice device : devices) {
-                            if (device instanceof VirtualDisk) {
-                                VirtualDisk disk = (VirtualDisk)device;
-                                Volume d = toVolume(disk, vm.getConfig().getInstanceUuid(), dc2, regionId);
-                                if (d != null) {
-                                    d.setGuestOperatingSystem(guestOs);
-                                    list.add(d);
-                                    fileNames.add(d.getProviderVolumeId());
+                            if( dc2 == null ) {
+                                return Collections.emptyList();
+                            }
+                            DataCenter ourDC = provider.getDataCenterServices().getDataCenter(dc2);
+                            String regionId = "";
+                            if (ourDC == null) {
+                                dc2 = dc2+"-a";
+                                regionId = dc2;
+                            }
+                            else {
+                                regionId = ourDC.getRegionId();
+                            }
+                            VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
+                            for (VirtualDevice device : devices) {
+                                if (device instanceof VirtualDisk) {
+                                    VirtualDisk disk = (VirtualDisk)device;
+                                    Volume d = toVolume(disk, vm.getConfig().getInstanceUuid(), dc2, regionId);
+                                    if (d != null) {
+                                        d.setGuestOperatingSystem(guestOs);
+                                        list.add(d);
+                                        fileNames.add(d.getProviderVolumeId());
+                                    }
                                 }
                             }
                         }
                     }
+                    else throw new CloudException("An error occurred while listing Volumes: VM could not be properly retrieved from the cloud.");
                 }
             }
 

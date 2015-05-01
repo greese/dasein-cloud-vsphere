@@ -152,7 +152,6 @@ public class VSphereNetwork extends AbstractVLANSupport{
                         for( Network network : nets ) {
                             if (network.getMOR().getType().equals("Network")) {
                                 networkList.add(toVlan(network));
-                                network.getSummary().
                             }
                             else if( network.getMOR().getType().equals("DistributedVirtualPortgroup") ) {
                                 DistributedVirtualPortgroup dvp = ( DistributedVirtualPortgroup ) network;

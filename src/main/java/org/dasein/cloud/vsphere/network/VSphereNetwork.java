@@ -151,6 +151,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
                     if (nets != null) {
                         for( Network network : nets ) {
                             if (network.getMOR().getType().equals("Network")) {
+                                log.debug("Adding network " + network.getName());
                                 networkList.add(toVlan(network));
                             }
                             else if( network.getMOR().getType().equals("DistributedVirtualPortgroup") ) {
@@ -159,8 +160,12 @@ public class VSphereNetwork extends AbstractVLANSupport{
                                 DistributedVirtualSwitch dvs = new DistributedVirtualSwitch(instance.getServerConnection(), mor);
                                 if (!dvsMap.containsKey(dvs.getName())) {
                                     dvsMap.put(dvs.getName(),dvs.getName());
+                                    log.debug("Adding DVS " + dvs.getName());
                                     networkList.add(toVlan(dvs));
                                 }
+                            }
+                            else {
+                                log.debug("Skipping " + network.getMOR().getType() + " " + network.getName());
                             }
                         }
                     }

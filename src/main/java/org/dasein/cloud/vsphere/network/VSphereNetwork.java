@@ -155,14 +155,8 @@ public class VSphereNetwork extends AbstractVLANSupport{
                                 networkList.add(toVlan(network));
                             }
                             else if( network.getMOR().getType().equals("DistributedVirtualPortgroup") ) {
-                                DistributedVirtualPortgroup dvp = ( DistributedVirtualPortgroup ) network;
-                                ManagedObjectReference mor = dvp.getConfig().getDistributedVirtualSwitch();
-                                DistributedVirtualSwitch dvs = new DistributedVirtualSwitch(instance.getServerConnection(), mor);
-                                if (!dvsMap.containsKey(dvs.getName())) {
-                                    dvsMap.put(dvs.getName(),dvs.getName());
-                                    log.debug("Adding DVS " + dvs.getName());
-                                    networkList.add(toVlan(dvs));
-                                }
+                                log.debug("Adding DVP " + network.getName());
+                                networkList.add(toVlan(network));
                             }
                             else {
                                 log.debug("Skipping " + network.getMOR().getType() + " " + network.getName());
@@ -211,26 +205,27 @@ public class VSphereNetwork extends AbstractVLANSupport{
         }
         return null;
     }
-
-    private VLAN toVlan(DistributedVirtualSwitch dvs) throws InternalException, CloudException {
-        if( dvs == null ) {
-            return null;
-        }
-        VLAN vlan = new VLAN();
-        vlan.setName(dvs.getName());
-        vlan.setDescription(vlan.getName() + "(" + dvs.getMOR().getVal() + ")");
-        vlan.setProviderVlanId(vlan.getName());
-        vlan.setCidr("");
-        vlan.setProviderRegionId(getContext().getRegionId());
-        DVSNetworkResourcePool[] pools = dvs.getNetworkResourcePool();
-        if( pools != null && pools.length > 0 ) {
-            vlan.setProviderDataCenterId(pools[0].getName());
-        }
-        vlan.setProviderOwnerId(getContext().getAccountNumber());
-        vlan.setSupportedTraffic(IPVersion.IPV4);
-        vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
-        vlan.setCurrentState(VLANState.AVAILABLE);
-        vlan.setNetworkType("dvs");
-        return vlan;
-    }
+//
+//    private VLAN toVlan(DistributedVirtualSwitch dvs) throws InternalException, CloudException {
+//        if( dvs == null ) {
+//            return null;
+//        }
+//        VLAN vlan = new VLAN();
+//        vlan.setName(dvs.getName());
+//        vlan.setDescription(vlan.getName() + "(" + dvs.getMOR().getVal() + ")");
+//        vlan.setProviderVlanId(vlan.getName());
+//        vlan.setCidr("");
+//        vlan.setProviderRegionId(getContext().getRegionId());
+//        DVSNetworkResourcePool[] pools = dvs.getNetworkResourcePool();
+//
+//        if( pools != null && pools.length > 0 ) {
+//            vlan.setProviderDataCenterId(pools[0].getName());
+//        }
+//        vlan.setProviderOwnerId(getContext().getAccountNumber());
+//        vlan.setSupportedTraffic(IPVersion.IPV4);
+//        vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
+//        vlan.setCurrentState(VLANState.AVAILABLE);
+//        vlan.setNetworkType("dvs");
+//        return vlan;
+//    }
 }

@@ -20,12 +20,14 @@ package org.dasein.cloud.vsphere.network;
 
 import com.vmware.vim25.*;
 import com.vmware.vim25.mo.*;
+import org.apache.log4j.Logger;
 import org.dasein.cloud.*;
 import org.dasein.cloud.Tag;
 import org.dasein.cloud.dc.DataCenter;
 import org.dasein.cloud.network.*;
 import org.dasein.cloud.util.APITrace;
 import org.dasein.cloud.vsphere.PrivateCloud;
+import org.dasein.cloud.vsphere.compute.Vm;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -41,6 +43,7 @@ import java.util.*;
 public class VSphereNetwork extends AbstractVLANSupport{
 
     private PrivateCloud provider;
+    static private final Logger log = PrivateCloud.getLogger(VSphereNetwork.class, "std");
 
     VSphereNetwork(PrivateCloud provider) {
         super(provider);
@@ -57,6 +60,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
     }
 
     private transient volatile VSphereNetworkCapabilities capabilities;
+
     @Override
     public VLANCapabilities getCapabilities() throws CloudException, InternalException {
         if( capabilities == null ) {
@@ -65,32 +69,27 @@ public class VSphereNetwork extends AbstractVLANSupport{
         return capabilities;
     }
 
-    @Nonnull
-    @Override
+    @Nonnull @Override
     public String getProviderTermForNetworkInterface(@Nonnull Locale locale) {
         return "nic";
     }
 
-    @Nonnull
-    @Override
+    @Nonnull @Override
     public String getProviderTermForSubnet(@Nonnull Locale locale) {
         return "network";
     }
 
-    @Nonnull
-    @Override
+    @Nonnull @Override
     public String getProviderTermForVlan(@Nonnull Locale locale) {
         return "network";
     }
 
-    @Nullable
-    @Override
+    @Nullable @Override
     public String getAttachedInternetGatewayId(@Nonnull String vlanId) throws CloudException, InternalException {
         return null;
     }
 
-    @Nullable
-    @Override
+    @Nullable @Override
     public InternetGateway getInternetGatewayById(@Nonnull String gatewayId) throws CloudException, InternalException {
         return null;
     }
@@ -135,6 +134,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
     @Override
     public Iterable<VLAN> listVlans() throws CloudException, InternalException {
         APITrace.begin(provider, "Network.listVlans");
+
         try {
             ServiceInstance instance = getServiceInstance();
 
@@ -151,18 +151,20 @@ public class VSphereNetwork extends AbstractVLANSupport{
                     if (nets != null) {
                         for( Network network : nets ) {
                             if (network.getMOR().getType().equals("Network")) {
+                                log.debug("Adding network " + network.getName());
                                 networkList.add(toVlan(network));
                             }
                             else if( network.getMOR().getType().equals("DistributedVirtualPortgroup") ) {
-                                DistributedVirtualPortgroup dvp = ( DistributedVirtualPortgroup ) network;
-                                ManagedObjectReference mor = dvp.getConfig().getDistributedVirtualSwitch();
-                                DistributedVirtualSwitch dvs = new DistributedVirtualSwitch(instance.getServerConnection(), mor);
-                                if (!dvsMap.containsKey(dvs.getName())) {
-                                    dvsMap.put(dvs.getName(),dvs.getName());
-                                    networkList.add(toVlan(dvs));
-                                }
+                                log.debug("Adding DVP " + network.getName());
+                                networkList.add(toVlan(network));
+                            }
+                            else {
+                                log.debug("Skipping " + network.getMOR().getType() + " " + network.getName());
                             }
                         }
+                    }
+                    else {
+                        log.debug("dc.getNetworks() returned null");
                     }
                 }
                 catch( InvalidProperty e ) {
@@ -175,6 +177,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
                     throw new CloudException("Error in cluster processing request: " + e.getMessage());
                 }
             }
+            log.debug("listVlans() returning " + networkList.size() + " elements");
             return networkList;
         }
         finally {
@@ -202,26 +205,27 @@ public class VSphereNetwork extends AbstractVLANSupport{
         }
         return null;
     }
-
-    private VLAN toVlan(DistributedVirtualSwitch dvs) throws InternalException, CloudException {
-        if( dvs == null ) {
-            return null;
-        }
-        VLAN vlan = new VLAN();
-        vlan.setName(dvs.getName());
-        vlan.setDescription(vlan.getName() + "(" + dvs.getMOR().getVal() + ")");
-        vlan.setProviderVlanId(vlan.getName());
-        vlan.setCidr("");
-        vlan.setProviderRegionId(getContext().getRegionId());
-        DVSNetworkResourcePool[] pools = dvs.getNetworkResourcePool();
-        if( pools != null && pools.length > 0 ) {
-            vlan.setProviderDataCenterId(pools[0].getName());
-        }
-        vlan.setProviderOwnerId(getContext().getAccountNumber());
-        vlan.setSupportedTraffic(IPVersion.IPV4);
-        vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
-        vlan.setCurrentState(VLANState.AVAILABLE);
-        vlan.setNetworkType("dvs");
-        return vlan;
-    }
+//
+//    private VLAN toVlan(DistributedVirtualSwitch dvs) throws InternalException, CloudException {
+//        if( dvs == null ) {
+//            return null;
+//        }
+//        VLAN vlan = new VLAN();
+//        vlan.setName(dvs.getName());
+//        vlan.setDescription(vlan.getName() + "(" + dvs.getMOR().getVal() + ")");
+//        vlan.setProviderVlanId(vlan.getName());
+//        vlan.setCidr("");
+//        vlan.setProviderRegionId(getContext().getRegionId());
+//        DVSNetworkResourcePool[] pools = dvs.getNetworkResourcePool();
+//
+//        if( pools != null && pools.length > 0 ) {
+//            vlan.setProviderDataCenterId(pools[0].getName());
+//        }
+//        vlan.setProviderOwnerId(getContext().getAccountNumber());
+//        vlan.setSupportedTraffic(IPVersion.IPV4);
+//        vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
+//        vlan.setCurrentState(VLANState.AVAILABLE);
+//        vlan.setNetworkType("dvs");
+//        return vlan;
+//    }
 }

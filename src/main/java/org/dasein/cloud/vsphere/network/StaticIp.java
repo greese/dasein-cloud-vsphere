@@ -32,6 +32,7 @@ import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.identity.ServiceAction;
+import org.dasein.cloud.network.AbstractIpAddressSupport;
 import org.dasein.cloud.network.AddressType;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.IpAddress;
@@ -47,11 +48,9 @@ import org.dasein.cloud.vsphere.PrivateCloud;
  * @author George Reese (george.reese@imaginary.com)
  * @version 2012.02
  */
-public class StaticIp implements IpAddressSupport {
-    @SuppressWarnings({"unused", "FieldCanBeLocal"})
-    private PrivateCloud provider;
-    
-    StaticIp(@Nonnull PrivateCloud cloud) { provider = cloud; }
+public class StaticIp extends AbstractIpAddressSupport<PrivateCloud> {
+
+    StaticIp(@Nonnull PrivateCloud cloud) { super(cloud); }
     
     @Override
     public void assign(@Nonnull String addressId, @Nonnull String toServerId) throws InternalException, CloudException {
@@ -69,11 +68,11 @@ public class StaticIp implements IpAddressSupport {
     }
 
     private transient volatile StaticIPCapabilities capabilities;
-    @Nonnull
+
     @Override
-    public IPAddressCapabilities getCapabilities() throws CloudException, InternalException {
+    public @Nonnull IPAddressCapabilities getCapabilities() throws CloudException, InternalException {
         if( capabilities == null ) {
-            capabilities = new StaticIPCapabilities(provider);
+            capabilities = new StaticIPCapabilities(getProvider());
         }
         return capabilities;
     }
@@ -84,63 +83,8 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
-    public @Nonnull String getProviderTermForIpAddress(@Nonnull Locale locale) {
-        return "IP address";
-    }
-
-    @Override
-    public @Nonnull Requirement identifyVlanForVlanIPRequirement() throws CloudException, InternalException {
-        return Requirement.NONE;
-    }
-
-    @Override
-    public boolean isAssigned(@Nonnull AddressType type) {
-        return false;
-    }
-
-    @Override
-    public boolean isAssigned(@Nonnull IPVersion version) throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isAssignablePostLaunch(@Nonnull IPVersion version) throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isForwarding() {
-        return false;
-    }
-
-    @Override
-    public boolean isForwarding(IPVersion version) throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
-    public boolean isRequestable(@Nonnull AddressType type) {
-        return false;
-    }
-
-    @Override
-    public boolean isRequestable(@Nonnull IPVersion version) throws CloudException, InternalException {
-        return false;
-    }
-
-    @Override
     public boolean isSubscribed() throws CloudException, InternalException {
         return false;
-    }
-    
-    @Override
-    public @Nonnull Iterable<IpAddress> listPrivateIpPool(boolean unassignedOnly) throws InternalException, CloudException {
-        return Collections.emptyList();
-    }
-    
-    @Override
-    public @Nonnull Iterable<IpAddress> listPublicIpPool(boolean unassignedOnly) throws InternalException, CloudException {
-        return Collections.emptyList();
     }
 
     @Override
@@ -170,18 +114,8 @@ public class StaticIp implements IpAddressSupport {
     }
 
     @Override
-    public @Nonnull Iterable<IPVersion> listSupportedIPVersions() throws CloudException, InternalException {
-        return Collections.emptyList();
-    }
-
-    @Override
     public @Nonnull String[] mapServiceAction(@Nonnull ServiceAction action) {
         return new String[0];
-    }
-
-    @Override
-    public @Nonnull String request(@Nonnull AddressType type) throws InternalException, CloudException {
-        throw new OperationNotSupportedException("Unable to allocate new IP addresses.");
     }
 
     @Override
@@ -214,8 +148,4 @@ public class StaticIp implements IpAddressSupport {
         throw new OperationNotSupportedException("Unable to stop forwarding");
     }
 
-    @Override
-    public boolean supportsVLANAddresses(@Nonnull IPVersion ofVersion) throws InternalException, CloudException {
-        return false;
-    }
 }

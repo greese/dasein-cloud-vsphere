@@ -224,9 +224,6 @@ public class VMCapabilities extends AbstractCapabilities<PrivateCloud> implement
     public boolean supportsCloudStoredShellKey() throws InternalException, CloudException {return false;}
 
     @Override
-    public boolean supportsClientRequestToken() throws InternalException, CloudException {return false;}
-
-    @Override
     public boolean supportsSpotVirtualMachines() throws InternalException, CloudException {
         return false;
     }

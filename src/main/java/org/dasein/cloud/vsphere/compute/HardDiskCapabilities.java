@@ -114,6 +114,11 @@ public class HardDiskCapabilities extends AbstractCapabilities<PrivateCloud> imp
     }
 
     @Override
+    public @Nonnull Requirement getDeviceIdOnAttachRequirement() throws InternalException, CloudException {
+        return Requirement.NONE; // TODO: find out
+    }
+
+    @Override
     public boolean isVolumeSizeDeterminedByProduct() throws InternalException, CloudException {
         return false;
     }

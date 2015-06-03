@@ -21,6 +21,7 @@ package org.dasein.cloud.vsphere.network;
 import org.dasein.cloud.*;
 import org.dasein.cloud.network.IPVersion;
 import org.dasein.cloud.network.VLANCapabilities;
+import org.dasein.cloud.util.NamingConstraints;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 import javax.annotation.Nonnull;
@@ -156,5 +157,10 @@ public class VSphereNetworkCapabilities extends AbstractCapabilities<PrivateClou
     @Override
     public boolean supportsRawAddressRouting() throws CloudException, InternalException {
         return false;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Override
+    public NamingConstraints getVlanNamingConstraints(){
+        return NamingConstraints.getAlphaNumeric(1, 30).constrainedBy(new char[] {'-'}).lowerCaseOnly();
     }
 }

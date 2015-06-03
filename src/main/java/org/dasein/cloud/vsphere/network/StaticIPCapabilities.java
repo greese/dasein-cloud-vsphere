@@ -38,7 +38,7 @@ import java.util.Locale;
  * @version 2014.03 initial version
  * @since 2014.03
  */
-public class StaticIPCapabilities extends AbstractCapabilities<PrivateCloud> implements IPAddressCapabilities{
+public class StaticIPCapabilities extends AbstractCapabilities<PrivateCloud> implements IPAddressCapabilities {
     public StaticIPCapabilities(@Nonnull PrivateCloud provider) {
         super(provider);
     }
@@ -59,6 +59,11 @@ public class StaticIPCapabilities extends AbstractCapabilities<PrivateCloud> imp
     @Override
     public Requirement identifyVlanForIPRequirement() throws CloudException, InternalException {
         return Requirement.NONE;
+    }
+
+    @Override
+    public Requirement identifyVMForPortForwarding() throws CloudException, InternalException {
+        return Requirement.NONE; // TODO: find out
     }
 
     @Override

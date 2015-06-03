@@ -330,8 +330,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
 
     private transient volatile VMCapabilities capabilities;
 
-    @Nonnull @Override
-    public VirtualMachineCapabilities getCapabilities() throws InternalException, CloudException {
+    @Override
+    public @Nonnull VirtualMachineCapabilities getCapabilities() throws InternalException, CloudException {
         if( capabilities == null ) {
             capabilities = new VMCapabilities(getProvider());
         }

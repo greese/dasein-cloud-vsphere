@@ -61,6 +61,10 @@ public class StaticIPCapabilities extends AbstractCapabilities<PrivateCloud> imp
         return Requirement.NONE;
     }
 
+    @Nonnull @Override public Requirement identifyVMForPortForwarding() throws CloudException, InternalException {
+        return Requirement.NONE; // TODO
+    }
+
     @Override
     public boolean isAssigned(@Nonnull IPVersion version) throws CloudException, InternalException {
         return false;

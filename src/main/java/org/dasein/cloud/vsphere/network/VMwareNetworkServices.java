@@ -26,17 +26,20 @@ import org.dasein.cloud.vsphere.PrivateCloud;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-public class VMwareNetworkServices extends AbstractNetworkServices<PrivateCloud> {
-    public VMwareNetworkServices(@Nonnull PrivateCloud cloud) { super(cloud); }
-    
+public class VMwareNetworkServices extends AbstractNetworkServices {
+    private final PrivateCloud provider;
+
+    public VMwareNetworkServices(@Nonnull PrivateCloud cloud) {
+        this.provider = cloud;
+    }
+
     public @Nullable StaticIp getIpAddressSupport() {
         return null;
         //return new StaticIp(cloud);
     }
 
-    @Nullable
-    @Override
+    @Nullable @Override
     public VLANSupport getVlanSupport() {
-        return new VSphereNetwork(getProvider());
+        return new VSphereNetwork(provider);
     }
 }

@@ -467,49 +467,50 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         Iterable<VLAN> accessibleNetworks = vlanSupport.listVlans();
                         boolean changeRequired = true;
                         List<VirtualDeviceConfigSpec> machineSpecs = new ArrayList<VirtualDeviceConfigSpec>();
-                        GuestNicInfo[] nics = template.getGuest().getNet();
-                        if( nics != null ) {
-                            for( GuestNicInfo nic : nics ) {
-                                boolean nicDeleted = false;
-                                if( nic.getNetwork().equals(vlan) ) {
-                                    changeRequired = false;
-                                }
-                                else { // remove template nics for networks we have access to
-                                    for( VLAN accessibleNetwork : accessibleNetworks ) {
-                                        if( accessibleNetwork.getName().equals(nic.getNetwork()) ) {
-                                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
-                                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
-
-                                            VirtualEthernetCard newNic = new VirtualEthernetCard();
-                                            newNic.setKey(nic.getDeviceConfigId());
-
-                                            nicSpec.setDevice(newNic);
-                                            machineSpecs.add(nicSpec);
-                                            nicDeleted = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if( !nicDeleted ) {
-                                    resultingNetworks.add(nic.getNetwork());
-                                }
-                            }
-                        }
-                        else {
+//                        GuestNicInfo[] nics = template.getGuest().getNet();
+//                        if( nics != null ) {
+//                            for( GuestNicInfo nic : nics ) {
+//                                boolean nicDeleted = false;
+//                                if( nic.getNetwork().equals(vlan) ) {
+//                                    changeRequired = false;
+//                                }
+//                                else { // remove template nics for networks we have access to
+//                                    for( VLAN accessibleNetwork : accessibleNetworks ) {
+//                                        if( accessibleNetwork.getName().equals(nic.getNetwork()) ) {
+//                                            VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+//                                            nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+//
+//                                            VirtualEthernetCard newNic = new VirtualEthernetCard();
+//                                            newNic.setKey(nic.getDeviceConfigId());
+//
+//                                            nicSpec.setDevice(newNic);
+//                                            machineSpecs.add(nicSpec);
+//                                            nicDeleted = true;
+//                                            break;
+//                                        }
+//                                    }
+//                                }
+//                                if( !nicDeleted ) {
+//                                    resultingNetworks.add(nic.getNetwork());
+//                                }
+//                            }
+//                        }
+//                        else {
                             log.warn("Template" + template.getName() + " (" + template.getConfig().getInstanceUuid() + ") doesn't have VMware tools installed, going through hardware");
                             VirtualDevice[] virtualDevices = template.getConfig().getHardware().getDevice();
+                            VLAN targetVlan = null;
                             for(VirtualDevice virtualDevice : virtualDevices) {
                                 if( virtualDevice instanceof VirtualEthernetCard ) {
                                     VirtualEthernetCard veCard = ( VirtualEthernetCard ) virtualDevice;
                                     if( veCard.getBacking() instanceof VirtualEthernetCardNetworkBackingInfo ) {
                                         boolean nicDeleted = false;
                                         VirtualEthernetCardNetworkBackingInfo nicBacking = (VirtualEthernetCardNetworkBackingInfo) veCard.getBacking();
-                                        if( vlan.equals(nicBacking.getDeviceName()) ) {
+                                        if( vlan.equals(nicBacking.getNetwork().getVal()) ) {
                                             changeRequired = false;
                                         }
                                         else {
                                             for( VLAN accessibleNetwork : accessibleNetworks ) {
-                                                if( accessibleNetwork.getName().equals(nicBacking.getDeviceName()) ) {
+                                                if( accessibleNetwork.getProviderVlanId().equals(nicBacking.getNetwork().getVal()) ) {
                                                     VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
                                                     nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
 
@@ -518,17 +519,48 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                                     nicDeleted = true;
                                                     break;
                                                 }
+                                                else if( accessibleNetwork.getProviderVlanId().equals(vlan) ) {
+                                                    targetVlan = accessibleNetwork;
+                                                }
                                             }
                                         }
                                         if( !nicDeleted ) {
-                                            resultingNetworks.add(nicBacking.getDeviceName());
+                                            resultingNetworks.add(nicBacking.getNetwork().getVal());
+                                        }
+                                    }
+                                    else if ( veCard.getBacking() instanceof VirtualEthernetCardDistributedVirtualPortBackingInfo ){
+                                        boolean nicDeleted = false;
+                                        VirtualEthernetCardDistributedVirtualPortBackingInfo nicBacking = (VirtualEthernetCardDistributedVirtualPortBackingInfo) veCard.getBacking();
+                                        if( vlan.equals(nicBacking.getPort().getPortgroupKey()) ) {
+                                            changeRequired = false;
+                                        }
+                                        else {
+                                            for( VLAN accessibleNetwork : accessibleNetworks ) {
+                                                if( accessibleNetwork.getProviderVlanId().equals(nicBacking.getPort().getPortgroupKey()) ) {
+                                                    VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
+                                                    nicSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+
+                                                    nicSpec.setDevice(veCard);
+                                                    machineSpecs.add(nicSpec);
+                                                    nicDeleted = true;
+                                                }
+                                                else if( accessibleNetwork.getProviderVlanId().equals(vlan) ) {
+                                                    targetVlan = accessibleNetwork;
+                                                }
+                                                if( nicDeleted && targetVlan != null ) {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if( !nicDeleted ) {
+                                            resultingNetworks.add(nicBacking.getPort().getPortgroupKey());
                                         }
                                     }
                                 }
                             }
-                        }
+//                        }
 
-                        if( changeRequired ) {
+                        if( changeRequired && targetVlan != null ) {
                             VirtualDeviceConfigSpec nicSpec = new VirtualDeviceConfigSpec();
                             nicSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
 
@@ -538,16 +570,29 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             nic.connectable.startConnected = true;
 
                             Description info = new Description();
-                            info.setLabel(vlan);
-                            info.setSummary("Nic for network " + vlan);
+                            info.setLabel(targetVlan.getName());
+                            if( targetVlan.getProviderVlanId().startsWith("network") ) {
+                                info.setSummary("Nic for network " + targetVlan.getName());
 
-                            VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
-                            nicBacking.setDeviceName(vlan);
+                                VirtualEthernetCardNetworkBackingInfo nicBacking = new VirtualEthernetCardNetworkBackingInfo();
+                                nicBacking.setDeviceName(targetVlan.getName());
 
-                            nic.setAddressType("generated");
-                            nic.setBacking(nicBacking);
-                            nic.setKey(0);
+                                nic.setAddressType("generated");
+                                nic.setBacking(nicBacking);
+                                nic.setKey(0);
+                            }
+                            else {
+                                info.setSummary("Nic for DVS " + targetVlan.getName());
 
+                                VirtualEthernetCardDistributedVirtualPortBackingInfo nicBacking = new VirtualEthernetCardDistributedVirtualPortBackingInfo();
+                                DistributedVirtualSwitchPortConnection connection = new DistributedVirtualSwitchPortConnection();
+                                connection.setPortgroupKey(targetVlan.getProviderVlanId());
+                                connection.setSwitchUuid(targetVlan.getTag("switch.uuid"));
+                                nicBacking.setPort(connection);
+                                nic.setAddressType("generated");
+                                nic.setBacking(nicBacking);
+                                nic.setKey(0);
+                            }
                             nicSpec.setDevice(nic);
 
                             machineSpecs.add(nicSpec);
@@ -999,7 +1044,6 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
             for( ManagedEntity me : dc.getHostFolder().getChildEntity() ) {
                 if( me.getName().equals(clusterName) ) {
                     ComputeResource cluster = ( ComputeResource ) me;
-
                     for( HostSystem host : cluster.getHosts() ) {
                         if( host.getConfigStatus().equals(ManagedEntityStatus.green) ) {
                             possibles.add(host);

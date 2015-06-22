@@ -67,7 +67,7 @@ public class TemplateCapabilities extends AbstractCapabilities<PrivateCloud> imp
     @Nullable
     @Override
     public VisibleScope getImageVisibleScope() {
-        return VisibleScope.ACCOUNT_REGION;
+        return VisibleScope.ACCOUNT_DATACENTER;
     }
 
     @Nonnull

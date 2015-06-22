@@ -156,7 +156,7 @@ public class VSphereNetwork extends AbstractVLANSupport{
                             }
                             else if( network.getMOR().getType().equals("DistributedVirtualPortgroup") ) {
                                 log.debug("Adding DVP " + network.getName());
-                                networkList.add(toVlan(network));
+                                networkList.add(toVlan((DistributedVirtualPortgroup)network));
                             }
                             else {
                                 log.debug("Skipping " + network.getMOR().getType() + " " + network.getName());
@@ -186,46 +186,29 @@ public class VSphereNetwork extends AbstractVLANSupport{
     }
 
     private VLAN toVlan(Network network) throws InternalException, CloudException {
-        if (network != null) {
-            VLAN vlan = new VLAN();
-            vlan.setName(network.getName());
-            vlan.setDescription(vlan.getName()+"("+network.getMOR().getVal()+")");
-            vlan.setProviderVlanId(vlan.getName());
-            vlan.setCidr("");
-            vlan.setProviderRegionId(getContext().getRegionId());
-            vlan.setProviderOwnerId(getContext().getAccountNumber());
-            vlan.setSupportedTraffic(IPVersion.IPV4);
-            vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
-            NetworkSummary s = network.getSummary();
-            vlan.setCurrentState(VLANState.PENDING);
-            if (s.isAccessible()) {
-                vlan.setCurrentState(VLANState.AVAILABLE);
-            }
-            return vlan;
+        if (network == null) {
+            return null;
         }
-        return null;
+        VLAN vlan = new VLAN();
+        vlan.setName(network.getName());
+        vlan.setDescription(vlan.getName() + " ("+network.getMOR().getVal()+")");
+        vlan.setProviderVlanId(network.getMOR().getVal());
+        vlan.setCidr("");
+        if( network instanceof DistributedVirtualPortgroup ) {
+            DistributedVirtualPortgroup pg = (DistributedVirtualPortgroup) network;
+            ManagedObjectReference mor = pg.getConfig().getDistributedVirtualSwitch();
+            DistributedVirtualSwitch dvs = new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), mor);
+            vlan.setTag("switch.uuid", dvs.getUuid());
+        }
+        vlan.setProviderRegionId(getContext().getRegionId());
+        vlan.setProviderOwnerId(getContext().getAccountNumber());
+        vlan.setSupportedTraffic(IPVersion.IPV4);
+        vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
+        NetworkSummary s = network.getSummary();
+        vlan.setCurrentState(VLANState.PENDING);
+        if (s.isAccessible()) {
+            vlan.setCurrentState(VLANState.AVAILABLE);
+        }
+        return vlan;
     }
-//
-//    private VLAN toVlan(DistributedVirtualSwitch dvs) throws InternalException, CloudException {
-//        if( dvs == null ) {
-//            return null;
-//        }
-//        VLAN vlan = new VLAN();
-//        vlan.setName(dvs.getName());
-//        vlan.setDescription(vlan.getName() + "(" + dvs.getMOR().getVal() + ")");
-//        vlan.setProviderVlanId(vlan.getName());
-//        vlan.setCidr("");
-//        vlan.setProviderRegionId(getContext().getRegionId());
-//        DVSNetworkResourcePool[] pools = dvs.getNetworkResourcePool();
-//
-//        if( pools != null && pools.length > 0 ) {
-//            vlan.setProviderDataCenterId(pools[0].getName());
-//        }
-//        vlan.setProviderOwnerId(getContext().getAccountNumber());
-//        vlan.setSupportedTraffic(IPVersion.IPV4);
-//        vlan.setVisibleScope(VisibleScope.ACCOUNT_REGION);
-//        vlan.setCurrentState(VLANState.AVAILABLE);
-//        vlan.setNetworkType("dvs");
-//        return vlan;
-//    }
 }

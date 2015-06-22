@@ -452,11 +452,13 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                     config.setCpuHotAddEnabled(true);
                     config.setNumCoresPerSocket(cpuCount);
 
+                    // record all networks we will end up with so that we can configure NICs correctly
+                    List<String> resultingNetworks = new ArrayList<String>();
 
                     //networking section
                     //borrowed heavily from https://github.com/jedi4ever/jvspherecontrol
                     String vlan = options.getVlanId();
-                    int count = 0;
+
                     if( vlan != null ) {
 
                         // we don't need to do network config if the selected network
@@ -472,6 +474,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                 if( virtualDevice instanceof VirtualEthernetCard ) {
                                     VirtualEthernetCard veCard = ( VirtualEthernetCard ) virtualDevice;
                                     if( veCard.getBacking() instanceof VirtualEthernetCardNetworkBackingInfo ) {
+                                        boolean nicDeleted = false;
                                         VirtualEthernetCardNetworkBackingInfo nicBacking = (VirtualEthernetCardNetworkBackingInfo) veCard.getBacking();
                                         if( vlan.equals(nicBacking.getNetwork().getVal()) ) {
                                             changeRequired = false;
@@ -564,6 +567,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                             nicSpec.setDevice(nic);
 
                             machineSpecs.add(nicSpec);
+                            resultingNetworks.add(vlan);
 
                         }
                         config.setDeviceChange(machineSpecs.toArray(new VirtualDeviceConfigSpec[machineSpecs.size()]));
@@ -603,8 +607,8 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         if (platform.isLinux()) {
 
                             CustomizationLinuxPrep lPrep = new CustomizationLinuxPrep();
-                            lPrep.setDomain(options.getDnsDomain());
-                            lPrep.setHostName(new CustomizationVirtualMachineName());
+                            lPrep.setDomain(options.getDnsDomain()); // not null
+                            lPrep.setHostName(new CustomizationVirtualMachineName()); // not null
                             customizationSpec.setIdentity(lPrep);
                         }
                         else if( platform.isWindows() ) {
@@ -640,30 +644,42 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                         }
 
                         if( isCustomised ) {
-                            CustomizationGlobalIPSettings globalIPSettings = new CustomizationGlobalIPSettings();
-                            globalIPSettings.setDnsServerList(options.getDnsServerList());
-                            globalIPSettings.setDnsSuffixList(options.getDnsSuffixList());
-                            customizationSpec.setGlobalIPSettings(globalIPSettings);
+                            List<CustomizationAdapterMapping> adapterMappings = new ArrayList<CustomizationAdapterMapping>();
+                            for( String network : resultingNetworks ) {
+                                CustomizationAdapterMapping adapterMap = new CustomizationAdapterMapping();
+                                if( network.equalsIgnoreCase(vlan) ) {
+                                    CustomizationGlobalIPSettings globalIPSettings = new CustomizationGlobalIPSettings();
+                                    globalIPSettings.setDnsServerList(options.getDnsServerList());
+                                    globalIPSettings.setDnsSuffixList(options.getDnsSuffixList());
+                                    customizationSpec.setGlobalIPSettings(globalIPSettings);
 
-                            CustomizationAdapterMapping adapterMap = new CustomizationAdapterMapping();
-                            CustomizationIPSettings adapter = new CustomizationIPSettings();
-                            adapter.setDnsDomain(options.getDnsDomain());
-                            adapter.setGateway(options.getGatewayList());
-                            CustomizationFixedIp fixedIp = new CustomizationFixedIp();
-                            fixedIp.setIpAddress(options.getPrivateIp());
-                            adapter.setIp(fixedIp);
-                            if( options.getMetaData().containsKey("vSphereNetMaskNothingToSeeHere") ) {
-                                String netmask = ( String ) options.getMetaData().get("vSphereNetMaskNothingToSeeHere");
-                                adapter.setSubnetMask(netmask);
-                                log.debug("custom subnet mask: " + netmask);
-                            }
-                            else {
-                                adapter.setSubnetMask("255.255.252.0");
-                                log.debug("default subnet mask");
-                            }
+                                    CustomizationIPSettings adapter = new CustomizationIPSettings();
+                                    adapter.setDnsDomain(options.getDnsDomain());
+                                    adapter.setGateway(options.getGatewayList());
+                                    CustomizationFixedIp fixedIp = new CustomizationFixedIp();
+                                    fixedIp.setIpAddress(options.getPrivateIp());
+                                    adapter.setIp(fixedIp);
+                                    if( options.getMetaData().containsKey("vSphereNetMaskNothingToSeeHere") ) {
+                                        String netmask = ( String ) options.getMetaData().get("vSphereNetMaskNothingToSeeHere");
+                                        adapter.setSubnetMask(netmask);
+                                        log.debug("custom subnet mask: " + netmask);
+                                    }
+                                    else {
+                                        adapter.setSubnetMask("255.255.252.0");
+                                        log.debug("default subnet mask");
+                                    }
 
-                            adapterMap.setAdapter(adapter);
-                            customizationSpec.setNicSettingMap(Arrays.asList(adapterMap).toArray(new CustomizationAdapterMapping[1]));
+                                    adapterMap.setAdapter(adapter);
+                                }
+                                else {
+                                    CustomizationIPSettings adapter = new CustomizationIPSettings();
+                                    adapter.setDnsDomain(options.getDnsDomain());
+                                    adapter.setIp(new CustomizationDhcpIpGenerator());
+                                    adapterMap.setAdapter(adapter);
+                                }
+                                adapterMappings.add(adapterMap);
+                            }
+                            customizationSpec.setNicSettingMap(adapterMappings.toArray(new CustomizationAdapterMapping[adapterMappings.size()]));
                         }
                     }
 

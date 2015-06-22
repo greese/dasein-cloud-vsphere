@@ -21,6 +21,8 @@ package org.dasein.cloud.vsphere.compute;
 import java.rmi.RemoteException;
 import java.util.*;
 
+import com.vmware.vim25.*;
+import com.vmware.vim25.mo.*;
 import org.apache.log4j.Logger;
 import org.dasein.cloud.AsynchronousTask;
 import org.dasein.cloud.CloudErrorType;
@@ -43,18 +45,6 @@ import org.dasein.cloud.util.Cache;
 import org.dasein.cloud.util.CacheLevel;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.VirtualMachineConfigInfo;
-import com.vmware.vim25.VirtualMachineGuestOsIdentifier;
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineRuntimeInfo;
-import com.vmware.vim25.mo.Datacenter;
-import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.InventoryNavigator;
-import com.vmware.vim25.mo.ManagedEntity;
-import com.vmware.vim25.mo.ServiceInstance;
-import com.vmware.vim25.mo.VirtualMachine;
 import org.dasein.util.uom.time.Day;
 import org.dasein.util.uom.time.TimePeriod;
 
@@ -172,7 +162,7 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
             Platform platform;
             Architecture arch;
             MachineImageState imgState;
-            String ownerId = "", regionId = "", name = "", description = "", imageId = "", dataCenterId = "";
+            String ownerId = "", regionId = "", name = "", description = "", imageId = "", dataCenterId = null;
 
             try {
                 vminfo = template.getConfig();
@@ -200,7 +190,7 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
             ownerId = (getContext().getAccountNumber());
             imageId = (vminfo.getUuid());
             ManagedEntity parent = template.getParent();
-            while (parent != null) {
+            while( parent != null ) {
                 if (parent instanceof Datacenter) {
                     Region r = getProvider().getDataCenterServices().getRegion(parent.getName());
                     regionId = r.getProviderRegionId();
@@ -224,7 +214,8 @@ public class Template extends AbstractImageSupport<PrivateCloud> {
 
             image = MachineImage.getMachineImageInstance(ownerId, regionId, imageId, imgState, name, description, arch, platform);
             image.withSoftware("");
-            image.setTags(new HashMap<String,String>());
+            image.constrainedTo(dataCenterId);
+            image.setTags(new HashMap<String, String>());
             return image;
         }
         return null;

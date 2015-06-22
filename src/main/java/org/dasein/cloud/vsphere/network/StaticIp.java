@@ -49,7 +49,6 @@ import org.dasein.cloud.vsphere.PrivateCloud;
  * @version 2012.02
  */
 public class StaticIp extends AbstractIpAddressSupport<PrivateCloud> {
-
     StaticIp(@Nonnull PrivateCloud cloud) { super(cloud); }
     
     @Override

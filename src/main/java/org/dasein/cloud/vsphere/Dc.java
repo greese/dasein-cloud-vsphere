@@ -335,6 +335,7 @@ public class Dc implements DataCenterServices {
                     for( ManagedEntity entity : clusters ) {
 
                         ClusterComputeResource cluster = (ClusterComputeResource)entity;
+
                         if (cluster.getName().equals(providerDataCenterId)) {
                             ResourcePool root = cluster.getResourcePool();
                             if (root.getResourcePools() != null && root.getResourcePools().length > 0) {

@@ -32,13 +32,7 @@ import org.dasein.cloud.OperationNotSupportedException;
 import org.dasein.cloud.Requirement;
 import org.dasein.cloud.ResourceStatus;
 import org.dasein.cloud.identity.ServiceAction;
-import org.dasein.cloud.network.AddressType;
-import org.dasein.cloud.network.IPVersion;
-import org.dasein.cloud.network.IpAddress;
-import org.dasein.cloud.network.IPAddressCapabilities;
-import org.dasein.cloud.network.IpAddressSupport;
-import org.dasein.cloud.network.IpForwardingRule;
-import org.dasein.cloud.network.Protocol;
+import org.dasein.cloud.network.*;
 import org.dasein.cloud.vsphere.PrivateCloud;
 
 /**
@@ -47,11 +41,9 @@ import org.dasein.cloud.vsphere.PrivateCloud;
  * @author George Reese (george.reese@imaginary.com)
  * @version 2012.02
  */
-public class StaticIp implements IpAddressSupport {
+public class StaticIp extends AbstractIpAddressSupport<PrivateCloud> {
     @SuppressWarnings({"unused", "FieldCanBeLocal"})
-    private PrivateCloud provider;
-    
-    StaticIp(@Nonnull PrivateCloud cloud) { provider = cloud; }
+    StaticIp(@Nonnull PrivateCloud cloud) { super(cloud); }
     
     @Override
     public void assign(@Nonnull String addressId, @Nonnull String toServerId) throws InternalException, CloudException {
@@ -73,7 +65,7 @@ public class StaticIp implements IpAddressSupport {
     @Override
     public IPAddressCapabilities getCapabilities() throws CloudException, InternalException {
         if( capabilities == null ) {
-            capabilities = new StaticIPCapabilities(provider);
+            capabilities = new StaticIPCapabilities(getProvider());
         }
         return capabilities;
     }

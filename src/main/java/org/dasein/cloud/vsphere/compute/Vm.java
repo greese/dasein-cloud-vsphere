@@ -1171,6 +1171,20 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
     }
 
     @Override
+    public @Nonnull Iterable<VirtualMachineProduct> listProducts(@Nonnull String machineImageId, @Nonnull VirtualMachineProductFilterOptions options) throws InternalException, CloudException {
+        MachineImageSupport support = getProvider().getComputeServices().getImageSupport();
+        if( support == null ) {
+            throw new CloudException( getProvider().getCloudName() + " does not implement image support services");
+        }
+        MachineImage image = support.getImage(machineImageId);
+        if( image == null ) {
+            throw new CloudException("Machine image " + machineImageId + " not found" );
+        }
+
+        return listProducts(options, image.getArchitecture());
+    }
+
+    @Override
     public Iterable<VirtualMachineProduct> listProducts(VirtualMachineProductFilterOptions options, Architecture architecture) throws InternalException, CloudException {
         APITrace.begin(getProvider(), "Vm.listProducts(VirtualMachineProductFilterOptions, Architecture)");
         try {
@@ -1205,6 +1219,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                     product.setProviderProductId(cpu + ":" + ram);
                                     product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                    product.setArchitectures(a);
                                     allVirtualMachineProducts.add(product);
 
                                     //resource pools
@@ -1233,6 +1248,7 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                                     product.setRootVolumeSize(new Storage<Gigabyte>(1, Storage.GIGABYTE));
                                     product.setProviderProductId(cpu + ":" + ram);
                                     product.setRamSize(new Storage<Megabyte>(ram, Storage.MEGABYTE));
+                                    product.setArchitectures(a);
                                     allVirtualMachineProducts.add(product);
 
                                     //resource pools

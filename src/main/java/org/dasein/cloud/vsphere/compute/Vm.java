@@ -1907,25 +1907,27 @@ public class Vm extends AbstractVMSupport<PrivateCloud> {
                 throw new CloudException(ex);
             }
 
-            VirtualDevice[] virtualDevices = vm.getConfig().getHardware().getDevice();
-            for(VirtualDevice virtualDevice : virtualDevices) {
-                if( virtualDevice instanceof VirtualEthernetCard ) {
-                    VirtualEthernetCard veCard = ( VirtualEthernetCard ) virtualDevice;
-                    if( veCard.getBacking() instanceof VirtualEthernetCardNetworkBackingInfo ) {
-                        VirtualEthernetCardNetworkBackingInfo nicBacking = (VirtualEthernetCardNetworkBackingInfo) veCard.getBacking();
-                        String net = nicBacking.getNetwork().getVal();
-                        if ( net != null ) {
-                            if( server.getProviderVlanId() == null ) {
-                                server.setProviderVlanId(net);
+            if ( vminfo.getHardware().getDevice() != null && vminfo.getHardware().getDevice().length > 0 ) {
+                VirtualDevice[] virtualDevices = vminfo.getHardware().getDevice();
+                for(VirtualDevice virtualDevice : virtualDevices) {
+                    if( virtualDevice instanceof VirtualEthernetCard ) {
+                        VirtualEthernetCard veCard = ( VirtualEthernetCard ) virtualDevice;
+                        if( veCard.getBacking() instanceof VirtualEthernetCardNetworkBackingInfo ) {
+                            VirtualEthernetCardNetworkBackingInfo nicBacking = (VirtualEthernetCardNetworkBackingInfo) veCard.getBacking();
+                            String net = nicBacking.getNetwork().getVal();
+                            if ( net != null ) {
+                                if( server.getProviderVlanId() == null ) {
+                                    server.setProviderVlanId(net);
+                                }
                             }
                         }
-                    }
-                    else if ( veCard.getBacking() instanceof VirtualEthernetCardDistributedVirtualPortBackingInfo ) {
-                        VirtualEthernetCardDistributedVirtualPortBackingInfo nicBacking = (VirtualEthernetCardDistributedVirtualPortBackingInfo) veCard.getBacking();
-                        String net = nicBacking.getPort().getPortgroupKey();
-                        if ( net != null ) {
-                            if (server.getProviderVlanId() == null ) {
-                                server.setProviderVlanId(net);
+                        else if ( veCard.getBacking() instanceof VirtualEthernetCardDistributedVirtualPortBackingInfo ) {
+                            VirtualEthernetCardDistributedVirtualPortBackingInfo nicBacking = (VirtualEthernetCardDistributedVirtualPortBackingInfo) veCard.getBacking();
+                            String net = nicBacking.getPort().getPortgroupKey();
+                            if ( net != null ) {
+                                if (server.getProviderVlanId() == null ) {
+                                    server.setProviderVlanId(net);
+                                }
                             }
                         }
                     }
